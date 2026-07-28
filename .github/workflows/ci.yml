@@ -49,8 +49,21 @@ jobs:
       - name: Set flags
         if: ${{ matrix.features }}
         run: |
-          # Append AVX2/AVX-512 to existing flags so we keep -C debuginfo=0.
-          echo "RUSTFLAGS=$RUSTFLAGS -C target-feature=${{ matrix.features }}" >> "$GITHUB_ENV"
+          if [ "${{ matrix.compile_only }}" = "true" ]; then
+            # Scope the flag to the target triple (via CARGO_TARGET_*_RUSTFLAGS)
+            # instead of global RUSTFLAGS, so it never reaches build
+            # scripts/proc-macros — those compile for the host and are
+            # executed during the build itself, and would SIGILL on runners
+            # that lack this instruction set (which is exactly why this leg
+            # is compile-only). This only takes effect when cargo is invoked
+            # with an explicit --target, which also unsets RUSTFLAGS: cargo
+            # uses whichever of RUSTFLAGS / CARGO_TARGET_*_RUSTFLAGS is
+            # merely *present* first, it does not merge them.
+            echo "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS=-C debuginfo=0 -C target-feature=${{ matrix.features }}" >> "$GITHUB_ENV"
+          else
+            # Append AVX2/AVX-512 to existing flags so we keep -C debuginfo=0.
+            echo "RUSTFLAGS=$RUSTFLAGS -C target-feature=${{ matrix.features }}" >> "$GITHUB_ENV"
+          fi
 
       # Smarter cache for Rust builds; avoids overfilling the runner disk.
       - uses: Swatinem/rust-cache@v2
@@ -65,11 +78,15 @@ jobs:
 
       - name: Build
         if: ${{ matrix.compile_only }}
-        run: cargo build --all-targets
+        # Explicit --target (even though it matches the host) makes cargo
+        # apply CARGO_TARGET_*_RUSTFLAGS only to target artifacts and skip
+        # build scripts/proc-macros. Unset RUSTFLAGS so it doesn't pre-empt
+        # the target-scoped flags (see the "Set flags" step above).
+        run: unset RUSTFLAGS; cargo build --all-targets --target x86_64-unknown-linux-gnu
 
       - name: Build with parallel
         if: ${{ matrix.compile_only }}
-        run: cargo build --all-targets --features parallel
+        run: unset RUSTFLAGS; cargo build --all-targets --features parallel --target x86_64-unknown-linux-gnu
 
       - name: Test keccak (aarch64, no SHA3)
         if: ${{ matrix.os == 'macos-latest' }}
