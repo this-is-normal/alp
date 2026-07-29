@@ -1,0 +1,94 @@
+use core::borrow::BorrowMut;
+
+use p3_field::Field;
+use p3_matrix::dense::RowMajorMatrix;
+
+use crate::add::add_points;
+use crate::scalarmul::columns::{EcScalarMulCols, NUM_EC_SCALARMUL_COLS};
+
+/// Result of generating a scalar-multiplication trace: the trace itself, plus the public
+/// values (`[base_x, base_y, scalar, result_x, result_y]`) tying it to a specific instance.
+pub struct ScalarMulTrace<F> {
+    pub trace: RowMajorMatrix<F>,
+    pub public_values: [F; 5],
+}
+
+/// Generates a double-and-add trace for `scalar * base`, one row per bit of `scalar_bits`
+/// (least-significant bit first). `scalar_bits.len()` must be a power of two.
+pub fn generate_trace_rows<F: Field>(
+    d: F,
+    base: (F, F),
+    scalar_bits: &[bool],
+) -> ScalarMulTrace<F> {
+    let num_rows = scalar_bits.len();
+    assert!(
+        num_rows.is_power_of_two(),
+        "trace height must be a power of two"
+    );
+
+    let mut trace_values = F::zero_vec(num_rows * NUM_EC_SCALARMUL_COLS);
+
+    let mut x_acc = F::ZERO;
+    let mut y_acc = F::ONE;
+    let (mut x_dbl, mut y_dbl) = base;
+    let mut weight = F::ONE;
+    let mut scalar_acc = F::ZERO;
+
+    for (row, chunk) in trace_values
+        .chunks_mut(NUM_EC_SCALARMUL_COLS)
+        .enumerate()
+    {
+        let bit = scalar_bits[row];
+        let bit_f = F::from_bool(bit);
+
+        let add_p = x_acc * x_dbl;
+        let add_q = y_acc * y_dbl;
+        let add_m = d * add_p * add_q;
+        let (sum_x, sum_y) = add_points(d, (x_acc, y_acc), (x_dbl, y_dbl));
+
+        let dbl_p = x_dbl * x_dbl;
+        let dbl_q = y_dbl * y_dbl;
+        let dbl_m = d * dbl_p * dbl_q;
+        let (dbl_x3, dbl_y3) = add_points(d, (x_dbl, y_dbl), (x_dbl, y_dbl));
+
+        scalar_acc += bit_f * weight;
+
+        let cols: &mut EcScalarMulCols<F> = chunk.borrow_mut();
+        *cols = EcScalarMulCols {
+            bit: bit_f,
+            x_acc,
+            y_acc,
+            x_dbl,
+            y_dbl,
+            sum_x,
+            sum_y,
+            add_p,
+            add_q,
+            add_m,
+            dbl_x1: x_dbl,
+            dbl_y1: y_dbl,
+            dbl_x2: x_dbl,
+            dbl_y2: y_dbl,
+            dbl_x3,
+            dbl_y3,
+            dbl_p,
+            dbl_q,
+            dbl_m,
+            weight,
+            scalar_acc,
+        };
+
+        if bit {
+            x_acc = sum_x;
+            y_acc = sum_y;
+        }
+        x_dbl = dbl_x3;
+        y_dbl = dbl_y3;
+        weight *= F::TWO;
+    }
+
+    ScalarMulTrace {
+        trace: RowMajorMatrix::new(trace_values, NUM_EC_SCALARMUL_COLS),
+        public_values: [base.0, base.1, scalar_acc, x_acc, y_acc],
+    }
+}
