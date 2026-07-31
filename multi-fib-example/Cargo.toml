@@ -1,0 +1,30 @@
+[package]
+name = "multi-fib-example"
+description = "Minimal runnable multilinear (multi-stark) Fibonacci example over WHIR, for testing the multivariate proving path."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-air.workspace = true
+p3-baby-bear.workspace = true
+p3-challenger.workspace = true
+p3-dft.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-merkle-tree.workspace = true
+p3-multi-stark.workspace = true
+p3-sumcheck.workspace = true
+p3-symmetric.workspace = true
+p3-trivial-mpcs.workspace = true
+p3-util.workspace = true
+p3-whir.workspace = true
+
+rand.workspace = true
+tracing.workspace = true
+tracing-forest = { workspace = true, features = ["ansi", "smallvec"] }
+tracing-subscriber = { workspace = true, features = ["std", "env-filter"] }
+
+[lints]
+workspace = true

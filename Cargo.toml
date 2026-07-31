@@ -29,6 +29,7 @@ members = [
     "monolith",
     "monolith-air",
     "monty-31",
+    "multi-fib-example",
     "multi-stark",
     "multilinear-util",
     "poseidon1",
@@ -40,6 +41,7 @@ members = [
     "sha256",
     "sumcheck",
     "symmetric",
+    "trivial-mpcs",
     "uni-stark",
     "util",
     "whir",
@@ -127,6 +129,7 @@ p3-mersenne-31 = { path = "mersenne-31", version = "0.6.0" }
 p3-monolith = { path = "monolith", version = "0.6.0" }
 p3-monolith-air = { path = "monolith-air", version = "0.6.0" }
 p3-monty-31 = { path = "monty-31", version = "0.6.0" }
+p3-multi-stark = { path = "multi-stark", version = "0.6.0" }
 p3-multilinear-util = { path = "multilinear-util", version = "0.6.0" }
 p3-poseidon1 = { path = "poseidon1", version = "0.6.0" }
 p3-poseidon1-air = { path = "poseidon1-air", version = "0.6.0" }
@@ -137,6 +140,7 @@ p3-security = { path = "security", version = "0.6.0" }
 p3-sha256 = { path = "sha256", version = "0.6.0" }
 p3-sumcheck = { path = "sumcheck", version = "0.6.0" }
 p3-symmetric = { path = "symmetric", version = "0.6.0" }
+p3-trivial-mpcs = { path = "trivial-mpcs", version = "0.6.0" }
 p3-uni-stark = { path = "uni-stark", version = "0.6.0" }
 p3-util = { path = "util", version = "0.6.0" }
 p3-whir = { path = "whir", version = "0.6.0" }
