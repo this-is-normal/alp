@@ -1,0 +1,28 @@
+[package]
+name = "p3-brakedown"
+description = "Brakedown linear-time linear code (Spielman recursive construction) — field-agnostic encoder for a Brakedown-style multilinear PCS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-multilinear-util.workspace = true
+p3-sumcheck.workspace = true
+p3-util.workspace = true
+
+rand.workspace = true
+serde = { workspace = true, features = ["derive", "alloc"] }
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-challenger = { path = "../challenger" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-symmetric = { path = "../symmetric" }
+
+[lints]
+workspace = true

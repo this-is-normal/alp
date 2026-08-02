@@ -3,6 +3,9 @@
 //! the trivial PCS (M1) and later Brakedown (M3) — the AIR and `main` stay put.
 
 use p3_baby_bear::{BabyBear, Poseidon2BabyBear};
+use p3_brakedown::{
+    BrakedownCode as RealBrakedownCode, BrakedownMlPcs, LinearCode, TensorPcs,
+};
 use p3_challenger::DuplexChallenger;
 use p3_dft::Radix2DFTSmallBatch;
 use p3_field::Field;
@@ -180,5 +183,95 @@ pub fn config_for_trivial(log_height: usize, width: usize) -> MultiFibConfigTriv
 /// The trivial PCS injects no domain separator, so a bare seeded challenger
 /// suffices — identical on prove and verify sides.
 pub fn challenger_trivial() -> MyChallenger {
+    MyChallenger::new(perm())
+}
+
+// ---------------------------------------------------------------------------
+// M4: the same multilinear AIR path, committed with the **real recursive
+// Brakedown** tensor PCS (linear-time encoding — genuinely Brakedown, not the
+// RS/Ligero base). The stacked-layout sumcheck reduction is shared with WHIR;
+// only the final `P(r) = v` step is discharged by the tensor opening (no FFT,
+// but the reduction here happens to reuse two-adicity via `PrefixProver`).
+// ---------------------------------------------------------------------------
+
+/// The real recursive Brakedown linear-time code the tensor PCS commits through.
+pub type BrakedownCode = RealBrakedownCode<F, EF>;
+/// The standalone tensor commitment wrapped by the multilinear adapter.
+pub type BrakedownTensor = TensorPcs<F, EF, BrakedownCode, MyMmcs>;
+/// The Brakedown-backed multilinear PCS used by multi-stark.
+pub type BrakedownPcs = BrakedownMlPcs<F, EF, BrakedownCode, MyMmcs, L>;
+
+/// Fixed seed for the Brakedown code's random `A`/`B` expander matrices.
+///
+/// `config_for_brakedown` is called independently on the prover and verifier
+/// sides; seeding the code RNG deterministically guarantees both build the
+/// **identical** linear code (same sparse blocks), so their commitments,
+/// encodings, and query checks line up.
+const BRAKEDOWN_CODE_SEED: u64 = 0xB2A4E_D0;
+
+/// Preprocessing/padding floor for the Brakedown config. The tensor PCS commits
+/// the stacked polynomial at its natural arity, so any positive arity is fine.
+const BRAKEDOWN_FOLDING: usize = 1;
+
+/// A Brakedown-PCS-backed multilinear AIR configuration over BabyBear.
+pub struct MultiFibConfigBrakedown {
+    pcs: BrakedownPcs,
+}
+
+impl MultiStarkConfig for MultiFibConfigBrakedown {
+    type Val = F;
+    type Challenge = EF;
+    type Challenger = MyChallenger;
+    type Pcs = BrakedownPcs;
+
+    fn pcs(&self) -> &BrakedownPcs {
+        &self.pcs
+    }
+
+    fn min_num_variables(&self) -> usize {
+        BRAKEDOWN_FOLDING
+    }
+
+    fn build_witness(&self, tables: Vec<Table<F>>) -> Witness<F> {
+        L::new_witness(tables, BRAKEDOWN_FOLDING)
+    }
+
+    fn committed_table<'a>(
+        &self,
+        prover_data: &'a p3_brakedown::BrakedownProverData<F, EF, MyMmcs, L>,
+        table_index: usize,
+    ) -> &'a Table<F> {
+        prover_data.table(table_index)
+    }
+}
+
+/// Build a Brakedown-PCS configuration sized for a single trace.
+///
+/// The committed polynomial stacks every trace column, so the tensor scheme is
+/// sized for the stacked variable count `log_height + ceil(log2(width))`, split
+/// into `log_rows = stacked / 2` row variables and the rest as columns.
+pub fn config_for_brakedown(log_height: usize, width: usize) -> MultiFibConfigBrakedown {
+    let stacked_num_variables = log_height + log2_ceil_usize(width);
+    let log_rows = stacked_num_variables / 2;
+    // Columns carry the remaining variables; a power of two so the row/column
+    // split is itself a clean multilinear tensor.
+    let cols = 1 << (stacked_num_variables - log_rows);
+
+    let mmcs = MyMmcs::new(MyHash::new(perm()), MyCompress::new(perm()), 0);
+    // Real recursive Brakedown code over the (power-of-two) message length `cols`.
+    // Built from a fixed seed so the prover and verifier configs share one code.
+    let mut code_rng = SmallRng::seed_from_u64(BRAKEDOWN_CODE_SEED);
+    let code = BrakedownCode::from_message_len(cols, &mut code_rng);
+    // Brakedown's codeword length is not a power of two; clamp the query count to it.
+    let num_queries = core::cmp::min(32, code.codeword_len());
+    let tensor = TensorPcs::new(code, mmcs, log_rows, num_queries);
+    MultiFibConfigBrakedown {
+        pcs: BrakedownPcs::new(tensor),
+    }
+}
+
+/// The Brakedown PCS injects no domain separator, so a bare seeded challenger
+/// suffices — identical on prove and verify sides.
+pub fn challenger_brakedown() -> MyChallenger {
     MyChallenger::new(perm())
 }

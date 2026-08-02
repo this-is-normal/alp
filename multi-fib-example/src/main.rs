@@ -18,7 +18,8 @@
 //! Arg 1 is `log2(rows)` (default 8 → 256 rows); arg 2 is the PCS (default `whir`).
 
 use multi_fib_example::config::{
-    F, MultiFibConfig, MultiFibConfigTrivial, challenger, challenger_trivial, config_for,
+    F, MultiFibConfig, MultiFibConfigBrakedown, MultiFibConfigTrivial, challenger,
+    challenger_brakedown, challenger_trivial, config_for, config_for_brakedown,
     config_for_trivial,
 };
 use multi_fib_example::fib_air::{FibAir, NUM_COLS, fib_public_values_for_trace, fib_trace};
@@ -61,7 +62,8 @@ fn main() {
     match pcs_kind.as_str() {
         "trivial" => run_trivial(log_height, trace, pis),
         "whir" => run_whir(log_height, trace, pis),
-        other => panic!("unknown pcs '{other}': expected 'whir' or 'trivial'"),
+        "brakedown" => run_brakedown(log_height, trace, pis),
+        other => panic!("unknown pcs '{other}': expected 'whir', 'trivial', or 'brakedown'"),
     }
 
     println!("OK: multilinear Fibonacci ({pcs_kind}) proved and verified over 2^{log_height} = {n} rows.");
@@ -91,6 +93,32 @@ fn run_whir(log_height: usize, trace: RowMajorMatrix<F>, pis: [F; 3]) {
         &mut challenger(&config),
     )
     .expect("honest Fibonacci proof must verify (whir)");
+}
+
+/// Prove + verify with the Brakedown/Ligero tensor PCS.
+fn run_brakedown(log_height: usize, trace: RowMajorMatrix<F>, pis: [F; 3]) {
+    let config: MultiFibConfigBrakedown = config_for_brakedown(log_height, NUM_COLS);
+
+    let (pk, vk) = setup(&config, &[&FibAir], &mut challenger_brakedown());
+    let proof = prove(
+        &config,
+        ProverInstances::new(vec![ProverInstance::new(
+            &FibAir,
+            Table::new(trace.transpose()),
+            &pk,
+            &pis,
+        )]),
+        0,
+        &mut challenger_brakedown(),
+    );
+    verify(
+        &config,
+        VerifierInstances::new(vec![VerifierInstance::new(&FibAir, &vk, log_height, &pis)]),
+        &proof,
+        0,
+        &mut challenger_brakedown(),
+    )
+    .expect("honest Fibonacci proof must verify (brakedown)");
 }
 
 /// Prove + verify with the trivial field-agnostic PCS.
