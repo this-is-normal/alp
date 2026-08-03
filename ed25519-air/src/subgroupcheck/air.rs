@@ -1,7 +1,7 @@
 use core::borrow::Borrow;
 
 use p3_air::{Air, AirBuilder, BaseAir, WindowAccess};
-use p3_field::{Dup, Field, PrimeCharacteristicRing};
+use p3_field::{Dup, Field};
 use p3_uni_stark::SubAirBuilder;
 
 use crate::add::EcAddAir;
@@ -33,10 +33,7 @@ where
     AB::F: Field,
 {
     fn eval(&self, builder: &mut AB) {
-        let point_check_air = EcPointCheckAir {
-            a: -AB::F::ONE,
-            d: self.d.dup(),
-        };
+        let point_check_air = EcPointCheckAir { d: self.d.dup() };
         let add_air = EcAddAir { d: self.d.dup() };
 
         {

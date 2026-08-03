@@ -2,9 +2,9 @@
 //!
 //! `p3-bn254` is used here purely as a convenient, already-implemented native field to
 //! validate the *shape* of the curve-membership constraints (helper-column wiring, degree,
-//! etc). The `a`/`d` curve parameters below are arbitrary field elements, not the real
-//! ed25519 constants — that only becomes meaningful once ed25519's actual base field lands
-//! in this repo.
+//! etc). `a = -1` is fixed (matching ed25519); the `d` curve parameter below is an arbitrary
+//! field element, not the real ed25519 constant — that only becomes meaningful once
+//! ed25519's actual base field lands in this repo.
 //!
 //! The Fiat-Shamir transcript below is a minimal insecure test-only challenger (not a real
 //! Poseidon2 sponge) built directly from `Bn254` field arithmetic, since no ready-made
@@ -85,23 +85,25 @@ fn build_config(log_n: usize) -> Config {
     Config::new(pcs, TestChallenger::new())
 }
 
-/// Placeholder curve constants; see module docs. Chosen so `(0, 1)` (the padding identity)
-/// and the sample points below all satisfy `a*x^2 + y^2 = 1 + d*x^2*y^2`.
-const A: u64 = 1;
+/// Placeholder curve constant; see module docs. `a = -1` is fixed (matching ed25519 and
+/// `EcAddAir`). Chosen so `(0, 1)` (the padding identity) and the sample points below all
+/// satisfy `-x^2 + y^2 = 1 + d*x^2*y^2`.
 const D: u64 = 0;
 
-/// On-curve points for `a = 1`, `d = 0`, i.e. `x^2 + y^2 = 1`.
+/// On-curve points for `a = -1`, `d = 0`, i.e. `y^2 - x^2 = 1`.
 ///
-/// Uses the standard rational parametrization of the unit circle,
-/// `x = (1-t^2)/(1+t^2)`, `y = 2t/(1+t^2)`, which satisfies `x^2 + y^2 = 1` as a formal
-/// identity over any field (no square roots needed), as long as `1+t^2` is invertible.
+/// Uses the standard rational parametrization of the unit hyperbola,
+/// `x = 2t/(1-t^2)`, `y = (1+t^2)/(1-t^2)`, which satisfies `y^2 - x^2 = 1` as a formal
+/// identity over any field (no square roots needed), as long as `1-t^2` is invertible.
+/// `t` starts at 2 (rather than 0) so no sample hits `t^2 = 1`, where the denominator
+/// vanishes.
 fn sample_points(rows: usize) -> Vec<(Bn254, Bn254)> {
     (0..rows)
         .map(|i| {
-            let t = Bn254::from_u32(i as u32);
-            let denom_inv = (Bn254::ONE + t * t).inverse();
-            let x = (Bn254::ONE - t * t) * denom_inv;
-            let y = (Bn254::from_u32(2) * t) * denom_inv;
+            let t = Bn254::from_u32(i as u32 + 2);
+            let denom_inv = (Bn254::ONE - t * t).inverse();
+            let x = (Bn254::from_u32(2) * t) * denom_inv;
+            let y = (Bn254::ONE + t * t) * denom_inv;
             (x, y)
         })
         .collect()
@@ -109,9 +111,8 @@ fn sample_points(rows: usize) -> Vec<(Bn254, Bn254)> {
 
 #[test]
 fn pointcheck_prove_and_verify() {
-    let a = Bn254::from_u32(A as u32);
     let d = Bn254::from_u32(D as u32);
-    let air = EcPointCheckAir { a, d };
+    let air = EcPointCheckAir { d };
     let trace = generate_trace_rows(&sample_points(8));
 
     let config = build_config(3);
@@ -127,9 +128,8 @@ fn pointcheck_prove_and_verify() {
 #[test]
 #[should_panic(expected = "constraints not satisfied on row")]
 fn pointcheck_rejects_off_curve_point() {
-    let a = Bn254::from_u32(A as u32);
     let d = Bn254::from_u32(D as u32);
-    let air = EcPointCheckAir { a, d };
+    let air = EcPointCheckAir { d };
     let mut trace = generate_trace_rows(&sample_points(8));
 
     // Corrupt the `x` coordinate of the first row so it no longer matches its `x2` helper
@@ -144,9 +144,8 @@ fn pointcheck_rejects_off_curve_point() {
 #[test]
 #[should_panic(expected = "constraints not satisfied on row")]
 fn pointcheck_rejects_tampered_helper_column() {
-    let a = Bn254::from_u32(A as u32);
     let d = Bn254::from_u32(D as u32);
-    let air = EcPointCheckAir { a, d };
+    let air = EcPointCheckAir { d };
     let mut trace = generate_trace_rows(&sample_points(8));
 
     // Corrupt the `x2` helper column of the first row, leaving `x`, `y` valid: the

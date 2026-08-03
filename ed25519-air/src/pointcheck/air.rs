@@ -6,12 +6,11 @@ use p3_field::{Dup, PrimeCharacteristicRing};
 use crate::pointcheck::columns::{EcPointCheckCols, NUM_EC_POINTCHECK_COLS};
 
 /// AIR checking that each row's `(x, y)` lies on the twisted-Edwards curve
-/// `a*x^2 + y^2 = 1 + d*x^2*y^2`, with both curve parameters supplied at construction.
+/// `-x^2 + y^2 = 1 + d*x^2*y^2` (`a = -1`, matching ed25519 and [`EcAddAir`][crate::add::EcAddAir]).
 ///
 /// Each row is an independent check; there are no transition or boundary constraints.
 #[derive(Debug, Clone, Copy)]
 pub struct EcPointCheckAir<F> {
-    pub a: F,
     pub d: F,
 }
 
@@ -31,8 +30,8 @@ impl<AB: AirBuilder> Air<AB> for EcPointCheckAir<AB::F> {
         builder.assert_zero(x * x - x2);
         builder.assert_zero(y * y - y2);
 
-        // a*x2 + y2 == 1 + d*x2*y2
-        let lhs = x2 * self.a.dup() + y2;
+        // -x2 + y2 == 1 + d*x2*y2
+        let lhs = y2 - x2;
         let rhs = AB::Expr::ONE + (x2 * y2) * self.d.dup();
         builder.assert_zero(lhs - rhs);
     }

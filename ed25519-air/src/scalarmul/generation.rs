@@ -25,6 +25,14 @@ pub fn generate_trace_rows<F: Field>(
         num_rows.is_power_of_two(),
         "trace height must be a power of two"
     );
+    assert!(
+        num_rows < F::bits(),
+        "scalar_bits.len() ({num_rows}) must be strictly less than the field's bit length \
+         ({}); otherwise scalar_acc = sum(bit_i * 2^i) can wrap around the field \
+         characteristic, so the field-equality check against `scalar` no longer uniquely \
+         determines the bit vector",
+        F::bits()
+    );
 
     let mut trace_values = F::zero_vec(num_rows * NUM_EC_SCALARMUL_COLS);
 
