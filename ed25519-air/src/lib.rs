@@ -15,6 +15,8 @@
 extern crate alloc;
 
 pub mod add;
+pub mod eddsa;
+pub mod fixed_scalarmul;
 pub mod pointcheck;
 pub mod scalarmul;
 pub mod subgroupcheck;

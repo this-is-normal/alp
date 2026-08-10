@@ -14,11 +14,11 @@
 
 use std::marker::PhantomData;
 
+use num_bigint::BigUint;
 use p3_bn254::Bn254;
 use p3_challenger::{CanObserve, CanSample, CanSampleBits, FieldChallenger};
 use p3_commit::testing::TrivialPcs;
 use p3_dft::Radix2DitParallel;
-use num_bigint::BigUint;
 use p3_ed25519_air::add::add_points;
 use p3_ed25519_air::subgroupcheck::{
     EcSubgroupCheckAir, generate_trace_rows, generate_trace_rows_for_targets, scalar_mul,

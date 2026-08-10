@@ -48,6 +48,13 @@ pub struct EcScalarMulCols<T> {
     pub weight: T,
     /// Running weighted sum of bits seen so far (including this row's bit).
     pub scalar_acc: T,
+
+    /// Accumulator value after folding in this row's bit (`mux(bit, sum, acc)`); equals
+    /// `next.x_acc`/`next.y_acc` for every row but the last, where it's the only witnessed
+    /// copy of the final `scalar * base` result (there's no row after the last to read it
+    /// from otherwise).
+    pub result_x: T,
+    pub result_y: T,
 }
 
 pub const NUM_EC_SCALARMUL_COLS: usize = size_of::<EcScalarMulCols<u8>>();

@@ -9,7 +9,7 @@ use p3_bn254::Bn254;
 use p3_challenger::{CanObserve, CanSample, CanSampleBits, FieldChallenger};
 use p3_commit::testing::TrivialPcs;
 use p3_dft::Radix2DitParallel;
-use p3_ed25519_air::scalarmul::{EcScalarMulAir, generate_trace_rows};
+use p3_ed25519_air::scalarmul::{EcScalarMulAir, NUM_EC_SCALARMUL_COLS, generate_trace_rows};
 use p3_field::{PrimeCharacteristicRing, PrimeField};
 use p3_uni_stark::{StarkConfig, prove, verify};
 
@@ -92,35 +92,37 @@ fn scalarmul_prove_and_verify() {
     let d = Bn254::from_u32(D as u32);
     let air = EcScalarMulAir { d };
     let base = (Bn254::from_u32(3), Bn254::from_u32(5));
-    let result = generate_trace_rows(d, base, &scalar_bits());
+    let trace = generate_trace_rows(d, base, &scalar_bits());
 
     let config = build_config(3);
-    let proof = prove(&config, &air, result.trace, &result.public_values);
-    verify(&config, &air, &proof, &result.public_values).expect("verification failed");
+    let proof = prove(&config, &air, trace, &[]);
+    verify(&config, &air, &proof, &[]).expect("verification failed");
 }
 
-// `TrivialPcs` (a toy PCS for structural tests, not a real commitment scheme) checks
-// opening consistency with a plain `assert_eq!` rather than returning a `Result::Err`, so a
-// mismatched public value surfaces here as a panic rather than an `Err` from `verify`.
+// `base`, `scalar`, and the result are all pure witness now (no public values); tampering
+// with any of them is just another way of tampering with the trace, caught the same way
+// `scalarmul_rejects_tampered_bit` below catches a corrupted `bit` column. In debug builds,
+// `prove` itself checks constraints and panics on a tampered trace, before a bad proof could
+// even reach `verify`; see the comment on `add_rejects_tampered_trace` in `tests/add.rs`.
+#[cfg(debug_assertions)]
 #[test]
-#[should_panic]
-fn scalarmul_rejects_wrong_public_result() {
+#[should_panic(expected = "constraints not satisfied on row")]
+fn scalarmul_rejects_tampered_result() {
     let d = Bn254::from_u32(D as u32);
     let air = EcScalarMulAir { d };
     let base = (Bn254::from_u32(3), Bn254::from_u32(5));
-    let result = generate_trace_rows(d, base, &scalar_bits());
+    let mut trace = generate_trace_rows(d, base, &scalar_bits());
+
+    // Corrupt the last row's `result_x` column (index 21 within the row), desyncing it from
+    // the mux expression it's constrained equal to.
+    let num_rows = scalar_bits().len();
+    let last_row_result_x = (num_rows - 1) * NUM_EC_SCALARMUL_COLS + 21;
+    trace.values[last_row_result_x] += Bn254::ONE;
 
     let config = build_config(3);
-    let proof = prove(&config, &air, result.trace, &result.public_values);
-
-    let mut wrong_public_values = result.public_values;
-    wrong_public_values[3] += Bn254::ONE; // corrupt the claimed result_x
-    let _ = verify(&config, &air, &proof, &wrong_public_values);
+    let _ = prove(&config, &air, trace, &[]);
 }
 
-// In debug builds, `prove` itself checks constraints and panics on a tampered trace,
-// before a bad proof could even reach `verify`; see the comment on `add_rejects_tampered_trace`
-// in `tests/add.rs`.
 #[cfg(debug_assertions)]
 #[test]
 #[should_panic(expected = "constraints not satisfied on row")]
@@ -128,13 +130,12 @@ fn scalarmul_rejects_tampered_bit() {
     let d = Bn254::from_u32(D as u32);
     let air = EcScalarMulAir { d };
     let base = (Bn254::from_u32(3), Bn254::from_u32(5));
-    let result = generate_trace_rows(d, base, &scalar_bits());
-    let mut trace = result.trace;
+    let mut trace = generate_trace_rows(d, base, &scalar_bits());
 
     // Flip the `bit` column of the first row; this should desync the boolean/mux constraints
-    // (or the scalar-reconstruction sum) from the public values.
+    // (or the scalar-reconstruction sum) from the rest of the trace.
     trace.values[0] = Bn254::ONE - trace.values[0];
 
     let config = build_config(3);
-    let _ = prove(&config, &air, trace, &result.public_values);
+    let _ = prove(&config, &air, trace, &[]);
 }

@@ -9,9 +9,6 @@ use crate::scalarmul::columns::{
     ADD_BLOCK_START, DBL_BLOCK_START, EcScalarMulCols, NUM_EC_SCALARMUL_COLS,
 };
 
-/// Public values: `[base_x, base_y, scalar, result_x, result_y]`.
-pub const NUM_PUBLIC_VALUES: usize = 5;
-
 /// AIR for `scalar * base` via double-and-add over one scalar bit per row (LSB first),
 /// built by embedding [`EcAddAir`] as a sub-AIR twice per row (once for the conditional
 /// accumulator update, once for doubling).
@@ -23,10 +20,6 @@ pub struct EcScalarMulAir<F> {
 impl<F: Sync> BaseAir<F> for EcScalarMulAir<F> {
     fn width(&self) -> usize {
         NUM_EC_SCALARMUL_COLS
-    }
-
-    fn num_public_values(&self) -> usize {
-        NUM_PUBLIC_VALUES
     }
 }
 
@@ -68,6 +61,8 @@ impl<AB: AirBuilder> Air<AB> for EcScalarMulAir<AB::F> {
             dbl_y3,
             weight,
             scalar_acc,
+            result_x,
+            result_y,
             ..
         } = local;
 
@@ -81,20 +76,14 @@ impl<AB: AirBuilder> Air<AB> for EcScalarMulAir<AB::F> {
         // The scalar bit must be boolean.
         builder.assert_bool(bit);
 
-        let public_values = builder.public_values();
-        let base_x = public_values[0];
-        let base_y = public_values[1];
-        let scalar = public_values[2];
-        let result_x = public_values[3];
-        let result_y = public_values[4];
-
-        // First row: accumulator starts at the identity, doubling point starts at the base
-        // point, and the weight starts at 2^0 = 1.
+        // First row: accumulator starts at the identity, and the weight starts at 2^0 = 1.
+        // `(x_dbl, y_dbl)` starting at the base point is not asserted here — the base is a
+        // pure witness value in this AIR, with no public counterpart to tie it to; a composing
+        // AIR that needs `(x_dbl, y_dbl)`'s first-row value fixed to something external adds
+        // that equality itself.
         let mut first_row = builder.when_first_row();
         first_row.assert_zero(x_acc);
         first_row.assert_one(y_acc);
-        first_row.assert_eq(x_dbl, base_x);
-        first_row.assert_eq(y_dbl, base_y);
         first_row.assert_one(weight);
         first_row.assert_eq(scalar_acc, bit * weight);
 
@@ -106,22 +95,15 @@ impl<AB: AirBuilder> Air<AB> for EcScalarMulAir<AB::F> {
         transition.assert_eq(next.x_dbl, dbl_x3);
         transition.assert_eq(next.y_dbl, dbl_y3);
         transition.assert_eq(next.weight, weight * AB::Expr::TWO);
-        transition.assert_eq(
-            next.scalar_acc,
-            scalar_acc + next.bit * next.weight,
-        );
+        transition.assert_eq(next.scalar_acc, scalar_acc + next.bit * next.weight);
 
-        // Last row: the scalar bits must reconstruct the public scalar, and folding in the
-        // last bit must produce the public result point.
-        let mut last_row = builder.when_last_row();
-        last_row.assert_eq(scalar_acc, scalar);
-        last_row.assert_eq(
-            result_x,
-            bit * sum_x + (AB::Expr::ONE - bit) * x_acc,
-        );
-        last_row.assert_eq(
-            result_y,
-            bit * sum_y + (AB::Expr::ONE - bit) * y_acc,
-        );
+        // Every row: `result_x`/`result_y` hold the accumulator after folding in this row's
+        // bit. For every row but the last this is redundant with the transition constraint
+        // above (it equals `next.x_acc`/`next.y_acc`); on the last row it's the only witnessed
+        // copy of the final `scalar * base` result, and is what a composing AIR reads (via
+        // `SubAirBuilder`) or ties to a public value itself. `scalar_acc`'s final value
+        // (reachable at the last row) plays the same role for the reconstructed scalar.
+        builder.assert_eq(result_x, bit * sum_x + (AB::Expr::ONE - bit) * x_acc);
+        builder.assert_eq(result_y, bit * sum_y + (AB::Expr::ONE - bit) * y_acc);
     }
 }
