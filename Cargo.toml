@@ -12,7 +12,9 @@ members = [
     "circle",
     "commit",
     "dft",
+    "ed25519",
     "ed25519-air",
+    "ed25519-fib-example",
     "examples",
     "field",
     "field-testing",
@@ -114,6 +116,7 @@ p3-challenger = { path = "challenger", version = "0.6.0" }
 p3-circle = { path = "circle", version = "0.6.0" }
 p3-commit = { path = "commit", version = "0.6.0" }
 p3-dft = { path = "dft", version = "0.6.0" }
+p3-ed25519 = { path = "ed25519", version = "0.6.0" }
 p3-examples = { path = "examples", version = "0.3.0" }
 p3-field = { path = "field", version = "0.6.0" }
 p3-field-testing = { path = "field-testing", version = "0.6.0" }

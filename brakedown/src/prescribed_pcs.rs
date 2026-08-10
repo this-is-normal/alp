@@ -51,7 +51,7 @@ use p3_challenger::{
     CanObserve, CanSampleBits, CanSampleUniformBits, FieldChallenger, GrindingChallenger,
 };
 use p3_commit::{Mmcs, MultilinearPcs};
-use p3_field::{ExtensionField, Field, TwoAdicField};
+use p3_field::{ExtensionField, Field};
 use p3_multilinear_util::point::Point;
 use p3_multilinear_util::poly::Poly;
 use p3_sumcheck::layout::{Layout, Table, Verifier, Witness};
@@ -131,7 +131,7 @@ where
 
 impl<Val, EF, M, L> BrakedownProverData<Val, EF, M, L>
 where
-    Val: TwoAdicField,
+    Val: Field,
     EF: ExtensionField<Val>,
     M: Mmcs<Val>,
     L: Layout<Val, EF>,
@@ -179,8 +179,8 @@ pub enum BrakedownPcsError<E> {
 impl<EF, Val, C, M, L, Challenger> MultilinearPcs<EF, Challenger>
     for BrakedownMlPcs<Val, EF, C, M, L>
 where
-    Val: TwoAdicField,
-    EF: ExtensionField<Val> + TwoAdicField,
+    Val: Field,
+    EF: ExtensionField<Val>,
     C: LinearCodeExt<Val, EF>,
     M: Mmcs<Val>,
     L: Layout<Val, EF>,
@@ -256,8 +256,8 @@ where
 impl<EF, Val, C, M, L, Challenger> PrescribedPointPcs<EF, Challenger>
     for BrakedownMlPcs<Val, EF, C, M, L>
 where
-    Val: TwoAdicField,
-    EF: ExtensionField<Val> + TwoAdicField,
+    Val: Field,
+    EF: ExtensionField<Val>,
     C: LinearCodeExt<Val, EF>,
     M: Mmcs<Val>,
     L: Layout<Val, EF>,

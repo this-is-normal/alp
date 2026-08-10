@@ -1,0 +1,28 @@
+[package]
+name = "ed25519-fib-example"
+description = "End-to-end multilinear (multi-stark) Fibonacci proof over the ed25519 base field, committed with the field-agnostic Brakedown tensor PCS. Native STARK over a non-two-adic, non-PrimeField64 field."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-air.workspace = true
+p3-brakedown.workspace = true
+p3-challenger.workspace = true
+p3-ed25519.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-merkle-tree.workspace = true
+p3-multi-stark.workspace = true
+p3-sumcheck.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+
+rand.workspace = true
+
+[dev-dependencies]
+p3-multi-stark.workspace = true
+
+[lints]
+workspace = true
