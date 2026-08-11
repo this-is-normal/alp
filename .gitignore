@@ -7,3 +7,7 @@ __pycache__/
 
 # Proptest data
 proptest-regressions/
+
+# Temporary docs
+docs/
+docs-ai/

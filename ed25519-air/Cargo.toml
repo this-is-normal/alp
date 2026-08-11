@@ -1,0 +1,31 @@
+[package]
+name = "p3-ed25519-air"
+description = "AIRs for elliptic-curve addition and scalar multiplication on the prime-order subgroup of ed25519, assuming the STARK's native field is the curve's base field"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+p3-air.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-uni-stark = { path = "../uni-stark" }
+
+num-bigint.workspace = true
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-bn254 = { path = "../bn254" }
+p3-challenger = { path = "../challenger" }
+p3-commit = { path = "../commit", features = ["test-utils"] }
+p3-dft = { path = "../dft" }
+p3-field-testing = { path = "../field-testing" }
+
+rand.workspace = true
+
+[lints]
+workspace = true
