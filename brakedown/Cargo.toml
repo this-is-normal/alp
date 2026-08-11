@@ -22,7 +22,14 @@ serde = { workspace = true, features = ["derive", "alloc"] }
 p3-baby-bear = { path = "../baby-bear" }
 p3-challenger = { path = "../challenger" }
 p3-merkle-tree = { path = "../merkle-tree" }
+p3-stark-stats = { path = "../stark-stats" }
 p3-symmetric = { path = "../symmetric" }
+
+criterion.workspace = true
+
+[[bench]]
+name = "tensor_pcs"
+harness = false
 
 [lints]
 workspace = true

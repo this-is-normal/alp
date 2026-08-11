@@ -11,3 +11,6 @@ proptest-regressions/
 # Temporary docs
 docs/
 docs-ai/
+
+# AI-context handoff doc (local only, not for upstream)
+BRAKEDOWN_ED25519_NOTES.md

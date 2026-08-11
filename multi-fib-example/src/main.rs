@@ -63,7 +63,13 @@ fn main() {
         "trivial" => run_trivial(log_height, trace, pis),
         "whir" => run_whir(log_height, trace, pis),
         "brakedown" => run_brakedown(log_height, trace, pis),
-        other => panic!("unknown pcs '{other}': expected 'whir', 'trivial', or 'brakedown'"),
+        "profile" => {
+            run_profile(log_height, trace, pis);
+            return;
+        }
+        other => {
+            panic!("unknown pcs '{other}': expected 'whir', 'trivial', 'brakedown', or 'profile'")
+        }
     }
 
     println!("OK: multilinear Fibonacci ({pcs_kind}) proved and verified over 2^{log_height} = {n} rows.");
@@ -145,4 +151,63 @@ fn run_trivial(log_height: usize, trace: RowMajorMatrix<F>, pis: [F; 3]) {
         &mut challenger_trivial(),
     )
     .expect("honest Fibonacci proof must verify (trivial)");
+}
+
+/// Profile the Brakedown PCS: print circuit shape, poly/commitment info, the
+/// per-role hash-op counts for prover vs verifier, and the serialized proof
+/// size. Counts come from the instrumented config (counters out of any timed
+/// path). This is the "cost report" tool.
+fn run_profile(log_height: usize, trace: RowMajorMatrix<F>, pis: [F; 3]) {
+    use multi_fib_example::config::{
+        challenger_brakedown_instrumented, config_for_brakedown_instrumented,
+    };
+    use p3_stark_stats::{AirShape, CircuitShape, serialized_size};
+
+    let (config, counts, info) = config_for_brakedown_instrumented(log_height, NUM_COLS);
+    let shape = CircuitShape::new(vec![AirShape {
+        name: "Fibonacci",
+        log_rows: log_height,
+        main_cols: NUM_COLS,
+        preproc_cols: 0,
+        num_public: 3,
+    }]);
+
+    println!("\n=== circuit shape ===\n{shape}");
+    println!("\n=== pcs / polynomial ===\n{info}");
+
+    // Fibonacci has no preprocessed trace; setup does no committing — don't count it.
+    let (pk, vk) = setup(&config, &[&FibAir], &mut challenger_brakedown_instrumented(&counts));
+
+    counts.reset();
+    let proof = prove(
+        &config,
+        ProverInstances::new(vec![ProverInstance::new(
+            &FibAir,
+            Table::new(trace.transpose()),
+            &pk,
+            &pis,
+        )]),
+        0,
+        &mut challenger_brakedown_instrumented(&counts),
+    );
+    let (pl, pc, ps) = counts.snapshot();
+
+    counts.reset();
+    verify(
+        &config,
+        VerifierInstances::new(vec![VerifierInstance::new(&FibAir, &vk, log_height, &pis)]),
+        &proof,
+        0,
+        &mut challenger_brakedown_instrumented(&counts),
+    )
+    .expect("profile proof must verify");
+    let (vl, vc, vs) = counts.snapshot();
+
+    println!("\n=== hash ops (invocations; leaf / compress / sponge) ===");
+    println!("  prover:   {pl} / {pc} / {ps}   (total {})", pl + pc + ps);
+    println!("  verifier: {vl} / {vc} / {vs}   (total {})", vl + vc + vs);
+    println!("\n=== proof size ===\n  {} bytes (postcard)", serialized_size(&proof));
+    println!(
+        "\n  note: BabyBear uses packed Merkle hashing, so one counted leaf-hash covers\n  F::Packing::WIDTH leaves; counts are hash invocations, not per-leaf."
+    );
 }

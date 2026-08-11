@@ -1,0 +1,23 @@
+[package]
+name = "p3-stark-stats"
+description = "Profiling/introspection helpers for the multi-stark + Brakedown path: hash-op counting wrappers, circuit/PCS shape reports, proof-size. Kept out of any timed path."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-symmetric.workspace = true
+
+serde = { workspace = true, features = ["derive", "alloc"] }
+postcard = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-poseidon2 = { path = "../poseidon2" }
+p3-field = { path = "../field" }
+p3-symmetric = { path = "../symmetric" }
+rand.workspace = true
+
+[lints]
+workspace = true

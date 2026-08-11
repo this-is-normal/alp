@@ -275,3 +275,101 @@ pub fn config_for_brakedown(log_height: usize, width: usize) -> MultiFibConfigBr
 pub fn challenger_brakedown() -> MyChallenger {
     MyChallenger::new(perm())
 }
+
+// ---------------------------------------------------------------------------
+// Instrumented Brakedown config (profiling): identical to the Brakedown config
+// but with the three hash roles wrapped in `p3-stark-stats` counters — leaf
+// hashing, node compression, and the challenger sponge permutation. Used ONLY
+// by the `profile` path; the plain `config_for_brakedown` is untouched, so
+// timed/perf runs never pay for the counters.
+//
+// NOTE on counts: BabyBear uses *packed* (SIMD) Merkle hashing, so one counted
+// leaf-hash covers `F::Packing::WIDTH` leaves. Counts are hash *invocations*,
+// not per-leaf. A `Packing = Self` field (bn254 / ed25519) would give exact
+// per-leaf counts.
+use p3_stark_stats::{CountingCompress, CountingHasher, CountingPerm, HashCounts, PcsInfo};
+
+type IHash = CountingHasher<MyHash>;
+type ICompress = CountingCompress<MyCompress>;
+type IMmcs = MerkleTreeMmcs<PackedF, PackedF, IHash, ICompress, 2, 8>;
+type IPerm = CountingPerm<Perm>;
+/// Instrumented challenger (counts sponge permutations).
+pub type IChallenger = DuplexChallenger<F, IPerm, 16, 8>;
+/// Instrumented Brakedown PCS.
+pub type IBrakedownPcs = BrakedownMlPcs<F, EF, BrakedownCode, IMmcs, L>;
+
+/// A Brakedown config whose hash roles are counter-instrumented.
+pub struct MultiFibConfigBrakedownInstrumented {
+    pcs: IBrakedownPcs,
+}
+
+impl MultiStarkConfig for MultiFibConfigBrakedownInstrumented {
+    type Val = F;
+    type Challenge = EF;
+    type Challenger = IChallenger;
+    type Pcs = IBrakedownPcs;
+
+    fn pcs(&self) -> &IBrakedownPcs {
+        &self.pcs
+    }
+
+    fn min_num_variables(&self) -> usize {
+        BRAKEDOWN_FOLDING
+    }
+
+    fn build_witness(&self, tables: Vec<Table<F>>) -> Witness<F> {
+        L::new_witness(tables, BRAKEDOWN_FOLDING)
+    }
+
+    fn committed_table<'a>(
+        &self,
+        prover_data: &'a p3_brakedown::BrakedownProverData<F, EF, IMmcs, L>,
+        table_index: usize,
+    ) -> &'a Table<F> {
+        prover_data.table(table_index)
+    }
+}
+
+/// Build the instrumented Brakedown config, returning shared hash counters and
+/// the static [`PcsInfo`] for the chosen shape.
+pub fn config_for_brakedown_instrumented(
+    log_height: usize,
+    width: usize,
+) -> (MultiFibConfigBrakedownInstrumented, HashCounts, PcsInfo) {
+    let stacked_num_variables = log_height + log2_ceil_usize(width);
+    let log_rows = stacked_num_variables / 2;
+    let cols = 1 << (stacked_num_variables - log_rows);
+
+    let counts = HashCounts::new();
+    let hash = CountingHasher::with_counter(MyHash::new(perm()), counts.leaf_hash.clone());
+    let compress = CountingCompress::with_counter(MyCompress::new(perm()), counts.compress.clone());
+    let mmcs = IMmcs::new(hash, compress, 0);
+
+    let mut code_rng = SmallRng::seed_from_u64(BRAKEDOWN_CODE_SEED);
+    let code = BrakedownCode::from_message_len(cols, &mut code_rng);
+    let codeword_len = code.codeword_len();
+    let num_queries = core::cmp::min(32, codeword_len);
+    let tensor = TensorPcs::new(code, mmcs, log_rows, num_queries);
+
+    let info = PcsInfo {
+        num_variables: stacked_num_variables,
+        log_rows,
+        cols,
+        codeword_len,
+        num_queries,
+        zerocheck_rounds: log_height,
+        opening_rounds: stacked_num_variables,
+    };
+    (
+        MultiFibConfigBrakedownInstrumented {
+            pcs: IBrakedownPcs::new(tensor),
+        },
+        counts,
+        info,
+    )
+}
+
+/// Instrumented challenger sharing the sponge counter from `counts`.
+pub fn challenger_brakedown_instrumented(counts: &HashCounts) -> IChallenger {
+    DuplexChallenger::new(CountingPerm::with_counter(perm(), counts.sponge.clone()))
+}
