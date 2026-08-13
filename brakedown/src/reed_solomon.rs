@@ -13,6 +13,7 @@ use alloc::vec::Vec;
 use p3_field::{Algebra, ExtensionField, Field};
 use p3_matrix::Matrix;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_maybe_rayon::prelude::*;
 
 use crate::{LinearCode, LinearCodeExt};
 
@@ -55,18 +56,23 @@ fn vandermonde_encode<F: Field, A: Algebra<F> + Copy + Send + Sync>(
     let w = msg.width();
     let n = points.len();
     let mut out = vec![A::ZERO; n * w];
-    for (t, &p) in points.iter().enumerate() {
-        let dst = &mut out[t * w..(t + 1) * w];
-        let mut pow = F::ONE;
-        for i in 0..k {
-            let src = &msg.values[i * w..(i + 1) * w];
-            for (d, &s) in dst.iter_mut().zip(src) {
-                // s : A (message value), pow : F — A is an F-algebra so `A * F` is defined.
-                *d += s * pow;
+    // Each evaluation point produces one independent output row (`out[t] = P(p_t)`),
+    // so the outer loop parallelizes cleanly (rayon under the `parallel` feature,
+    // serial otherwise). This is the dominant cost when RS is used as the
+    // top-level Ligero code (`O(n·k)` per column).
+    out.par_chunks_exact_mut(w)
+        .zip(points.par_iter())
+        .for_each(|(dst, &p)| {
+            let mut pow = F::ONE;
+            for i in 0..k {
+                let src = &msg.values[i * w..(i + 1) * w];
+                for (d, &s) in dst.iter_mut().zip(src) {
+                    // s : A (message value), pow : F — A is an F-algebra so `A * F` is defined.
+                    *d += s * pow;
+                }
+                pow *= p;
             }
-            pow *= p;
-        }
-    }
+        });
     RowMajorMatrix::new(out, w)
 }
 

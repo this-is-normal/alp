@@ -38,7 +38,7 @@ use p3_field::extension::BinomialExtensionField;
 use p3_field::Field;
 use p3_merkle_tree::MerkleTreeMmcs;
 use p3_multilinear_util::point::Point;
-use p3_stark_stats::{serialized_size, CountingCompress, CountingHasher, CountingPerm, HashCounts};
+use p3_stark_stats::{serialized_size, CountingPerm, HashCounts};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
 use rand::rngs::SmallRng;
 use rand::{RngExt, SeedableRng};
@@ -46,11 +46,13 @@ use rand::{RngExt, SeedableRng};
 type F = BabyBear;
 type EF = BinomialExtensionField<F, 4>;
 type Perm = Poseidon2BabyBear<16>;
-type MyHash = CountingHasher<PaddingFreeSponge<Perm, 16, 8, 8>>;
-type MyCompress = CountingCompress<TruncatedPermutation<Perm, 2, 8, 16>>;
+/// The permutation, wrapped so every `permute` call is counted.
+type CPerm = CountingPerm<Perm>;
+type MyHash = PaddingFreeSponge<CPerm, 16, 8, 8>;
+type MyCompress = TruncatedPermutation<CPerm, 2, 8, 16>;
 type PackedF = <F as Field>::Packing;
 type MyMmcs = MerkleTreeMmcs<PackedF, PackedF, MyHash, MyCompress, 2, 8>;
-type MyChallenger = DuplexChallenger<F, CountingPerm<Perm>, 16, 8>;
+type MyChallenger = DuplexChallenger<F, CPerm, 16, 8>;
 type Pcs = TensorPcs<F, EF, BrakedownCode<F, EF>, MyMmcs>;
 
 /// Fixed seeds so every row is reproducible and the two sides share one code.
@@ -77,9 +79,8 @@ struct Row {
 /// Build an instrumented Brakedown tensor PCS for `(log_rows, cols)`, sharing the
 /// three op counters so prover/verifier work can be attributed separately.
 fn build_pcs(log_rows: usize, cols: usize, num_queries: usize, counts: &HashCounts) -> Pcs {
-    let hash = CountingHasher::with_counter(PaddingFreeSponge::new(perm()), counts.leaf_hash.clone());
-    let compress =
-        CountingCompress::with_counter(TruncatedPermutation::new(perm()), counts.compress.clone());
+    let hash = MyHash::new(CountingPerm::with_counter(perm(), counts.leaf_hash.clone()));
+    let compress = MyCompress::new(CountingPerm::with_counter(perm(), counts.compress.clone()));
     let mmcs = MyMmcs::new(hash, compress, 0);
 
     let mut code_rng = SmallRng::seed_from_u64(CODE_SEED);
@@ -140,31 +141,34 @@ fn measure(log_rows: usize, cols: usize, num_queries: usize) -> Row {
 fn header(title: &str) {
     println!("\n=== {title} ===");
     println!(
-        "{:>4} {:>6} {:>6} {:>7} {:>4} | {:>16} | {:>16} | {:>9}",
-        "vars", "rows", "cols", "code_n", "q", "prover L/C/S", "verifier L/C/S", "proof(B)"
+        "{:>4} {:>6} {:>6} {:>7} {:>4} | {:>22} | {:>22} | {:>9}",
+        "vars", "rows", "cols", "code_n", "q", "prover perms L/C/S", "verifier perms L/C/S", "proof(B)"
     );
 }
 
+fn fmt_perms((l, c, s): (usize, usize, usize)) -> String {
+    format!("{l}/{c}/{s} ={}", l + c + s)
+}
+
 fn print_row(r: &Row) {
-    let (pl, pc, ps) = r.prover;
-    let (vl, vc, vs) = r.verifier;
     println!(
-        "{:>4} {:>6} {:>6} {:>7} {:>4} | {:>16} | {:>16} | {:>9}",
+        "{:>4} {:>6} {:>6} {:>7} {:>4} | {:>22} | {:>22} | {:>9}",
         r.num_vars,
         r.rows,
         r.cols,
         r.code_n,
         r.queries,
-        format!("{pl}/{pc}/{ps}"),
-        format!("{vl}/{vc}/{vs}"),
+        fmt_perms(r.prover),
+        fmt_perms(r.verifier),
         r.proof_bytes,
     );
 }
 
 fn main() {
-    println!("Brakedown tensor-PCS cost-model sweep (BabyBear + Poseidon2 + Merkle)");
-    println!("counts are hash INVOCATIONS: L=leaf-hash  C=compress  S=sponge-perm");
-    println!("(BabyBear packs leaves — L covers Packing::WIDTH leaves per call)");
+    println!("Brakedown tensor-PCS permutation-cost sweep (BabyBear + Poseidon2 + Merkle)");
+    println!("counts are POSEIDON2 PERMUTATIONS by role: L=leaf-sponge  C=compress(node)  S=challenger-sponge (=sum total)");
+    println!("NOTE: BabyBear L/C are PACKED-permutation counts (each covers Packing::WIDTH lanes);");
+    println!("      for exact scalar perms see pcs_cost_sweep_ed25519 (Packing=Self).");
 
     // 1) SCALE: grow num_vars, square-ish split, fixed query budget.
     header("scale: num_vars up, square split, q=32");
@@ -190,6 +194,6 @@ fn main() {
         print_row(&measure(8, 1 << 8, q));
     }
 
-    println!("\nprover  cost ~ commit(encode+Merkle build) + open(t Merkle paths)");
-    println!("verifier cost ~ t Merkle-path checks (≈ t · tree_depth compressions)");
+    println!("\nprover  perms ~ leaf-sponge over all code_n leaves + tree compress (dominated by leaf-sponge)");
+    println!("verifier perms ~ q leaf-sponges (opened columns) + q * tree_depth compressions");
 }

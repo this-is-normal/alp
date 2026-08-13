@@ -182,9 +182,13 @@ where
         // so the code (which encodes along its height) encodes each M-row.
         let m_natural = RowMajorMatrix::new(evals, cols);
         let msg = m_natural.transpose(); // cols × rows
-        let mhat_t = self.code.encode(&msg); // n × rows  (== M̂ᵀ; leaf t = column t of M̂)
+        // n × rows  (== M̂ᵀ; leaf t = column t of M̂). Spans surface the two
+        // commit stages — linear-code encoding vs Merkle build — in a prover's
+        // tracing tree (e.g. `eddsa-example`), where they nest under `prove`.
+        let mhat_t = tracing::info_span!("encode").in_scope(|| self.code.encode(&msg));
 
-        let (commitment, mmcs_data) = self.mmcs.commit_matrix(mhat_t);
+        let (commitment, mmcs_data) =
+            tracing::info_span!("merkle_commit").in_scope(|| self.mmcs.commit_matrix(mhat_t));
         challenger.observe(commitment.clone());
         (commitment, TensorProverData { msg, mmcs_data })
     }

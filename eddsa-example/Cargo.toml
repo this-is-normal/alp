@@ -1,0 +1,38 @@
+[package]
+name = "eddsa-example"
+description = "End-to-end ed25519 signature-verification (EdDSA) STARK: the monolithic p3-ed25519-air EdDsaAir proved over the native ed25519 base field with the field-agnostic Brakedown tensor PCS on the multilinear multi-stark path."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-air.workspace = true
+p3-brakedown.workspace = true
+p3-challenger.workspace = true
+p3-ed25519.workspace = true
+p3-ed25519-air.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-merkle-tree.workspace = true
+p3-multi-stark.workspace = true
+p3-sumcheck.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+
+num-bigint.workspace = true
+rand.workspace = true
+tracing.workspace = true
+tracing-forest = { workspace = true, features = ["ansi", "smallvec"] }
+tracing-subscriber = { workspace = true, features = ["std", "env-filter"] }
+
+[features]
+# Rayon parallelism through multi-stark: parallelizes the zerocheck/opening
+# sumchecks AND (via the shared maybe-rayon shim) the Brakedown Merkle commit.
+parallel = ["p3-multi-stark/parallel"]
+# Swap the tensor PCS's code from Brakedown to Reed-Solomon (→ Ligero): high
+# distance ⇒ few queries & smaller proofs, but superlinear Vandermonde encoding.
+ligero = []
+
+[lints]
+workspace = true
