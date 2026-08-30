@@ -230,6 +230,14 @@ impl PrimeCharacteristicRing for Ed25519 {
     fn halve(&self) -> Self {
         Self::new_monty(halve_ed25519(self.value))
     }
+
+    /// Squaring, counted separately from `Mul` for profiling. Computes the product directly
+    /// (does NOT route through `Mul`), so `square()` calls increment `SQ_TOTAL`, not `MUL_TOTAL`.
+    #[inline]
+    fn square(&self) -> Self {
+        #[cfg(feature = "count-ops")] crate::counters::on_sq();
+        Self::new_monty(monty_mul(self.value, self.value))
+    }
 }
 
 /// Degree of the smallest permutation polynomial for the ed25519 base field.
@@ -383,6 +391,7 @@ impl Field for Ed25519 {
         // binary-GCD inversion, whose round counts and adjustment constants are tuned for the
         // 254-bit bn254 prime) as it is unconditionally correct for this 255-bit prime and reuses
         // the existing windowed exponentiation. Inversion is rare and can be batched.
+        #[cfg(feature = "count-ops")] crate::counters::on_inv();
         (!self.is_zero()).then(|| exp_u256(*self, ED25519_PRIME_MINUS_2))
     }
 

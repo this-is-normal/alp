@@ -47,7 +47,14 @@ fn main() {
     let pcs = if cfg!(feature = "basefold") { "Basefold" } else { "Brakedown/tensor" };
     #[cfg(feature = "count-ops")]
     {
-        let (mul, add, perms) = p3_ed25519::counters::snapshot();
+        let c = p3_ed25519::counters::snapshot();
+        // Local hash = Poseidon2-over-Ed25519 (counted via on_perm → PERM_COUNT); the BabyBear
+        // config would use HASH_COUNT (`c.hash`) instead. Take whichever is populated.
+        let perms = {
+            let p = p3_ed25519::counters::PERM_COUNT.load(core::sync::atomic::Ordering::Relaxed);
+            if p != 0 { p } else { c.hash }
+        };
+        let (mul, add) = (c.mul, c.add);
         // Locally the hash is Poseidon2-over-Ed25519, so its muls are in `mul`. Subtract them
         // (perms × muls/perm) to isolate the PCS ARITHMETIC muls — the metric the Basefold model
         // is about (on vultr2/guest the hash is BabyBear, so total mul == arithmetic mul).
@@ -55,9 +62,9 @@ fn main() {
         let hash_muls = perms * k;
         let arith = mul.saturating_sub(hash_muls);
         println!(
-            "PCS={:<16} num_bits={} ok={:<5} | total_muls={:>9} perms={:>7} hash_muls={:>9} \
-             ARITH_muls={:>9}  (muls/perm={})",
-            pcs, num_bits, res.is_ok(), mul, perms, hash_muls, arith, k
+            "PCS={:<16} num_bits={} ok={:<5} | total_muls={:>9} sq={:>9} inv={:>7} add={:>9} \
+             perms={:>7} hash_muls={:>9} ARITH_muls={:>9}  (muls/perm={})",
+            pcs, num_bits, res.is_ok(), mul, c.sq, c.inv, add, perms, hash_muls, arith, k
         );
     }
     #[cfg(not(feature = "count-ops"))]

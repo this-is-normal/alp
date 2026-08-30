@@ -160,8 +160,7 @@ pub fn muls_per_perm() -> u64 {
     let mut st = [F::ZERO; WIDTH];
     p3_ed25519::counters::reset();
     p.permute_mut(&mut st);
-    let (m, _, _) = p3_ed25519::counters::snapshot();
-    m
+    p3_ed25519::counters::snapshot().mul
 }
 
 /// Build one Brakedown PCS sized for a `2^log_height`-row, `width`-column trace.
