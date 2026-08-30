@@ -173,9 +173,12 @@ fn build_pcs(log_height: usize, width: usize) -> CodePcs {
     // Basefold commits the stacked polynomial (num_variables = log_height + ceil(log2 width)).
     let num_variables = log_height + log2_ceil_usize(width);
     let mmcs = MyMmcs::new(MyHash::new(perm()), MyCompress::new(perm()), 0);
-    // Rate 1/4 foldable code, ChaCha-seeded (cross-platform). 32 queries = functional demo.
+    // Rate 1/4 foldable code, ChaCha-seeded (cross-platform).
     let code = RandomFoldableCode::<F>::new(num_variables, 4, 0xBA5E_F01D);
-    let num_queries = 32;
+    // 100-bit AGGRESSIVE security (rate 1/4, list-decoding radius δ≈0.215):
+    // q = ⌈100 / −log₂(1−δ)⌉ = 288, clamped to the codeword length (= inv_rate·2^num_variables)
+    // so tiny instances stay well-formed.
+    let num_queries = core::cmp::min(288, 4usize << num_variables);
     BasefoldMlPcs::new(BasefoldPcs::new(code, mmcs, num_queries))
 }
 
