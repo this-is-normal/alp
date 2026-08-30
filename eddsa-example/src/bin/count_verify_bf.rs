@@ -55,10 +55,13 @@ fn main() {
             if p != 0 { p } else { c.hash }
         };
         let (mul, add) = (c.mul, c.add);
-        // Locally the hash is Poseidon2-over-Ed25519, so its muls are in `mul`. Subtract them
-        // (perms × muls/perm) to isolate the PCS ARITHMETIC muls — the metric the Basefold model
-        // is about (on vultr2/guest the hash is BabyBear, so total mul == arithmetic mul).
+        // Default (ed25519 hash): its muls are in `mul`, so subtract them (perms × muls/perm) to
+        // isolate the PCS ARITHMETIC muls. Under `bb-hash` the hash is BabyBear, so k=0 and
+        // total mul == arithmetic mul (nothing to subtract).
+        #[cfg(not(feature = "bb-hash"))]
         let k = eddsa_example::config::muls_per_perm();
+        #[cfg(feature = "bb-hash")]
+        let k = 0u64;
         let hash_muls = perms * k;
         let arith = mul.saturating_sub(hash_muls);
         println!(

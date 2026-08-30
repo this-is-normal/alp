@@ -4,6 +4,7 @@
 extern crate alloc;
 
 mod duplex_challenger;
+mod cross_field_challenger;
 mod grinding_challenger;
 mod hash_challenger;
 mod multi_field_challenger;
@@ -14,6 +15,7 @@ use alloc::vec::Vec;
 use core::array;
 
 pub use duplex_challenger::*;
+pub use cross_field_challenger::*;
 pub use grinding_challenger::*;
 pub use hash_challenger::*;
 pub use multi_field_challenger::*;

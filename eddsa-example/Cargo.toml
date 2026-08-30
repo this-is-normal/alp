@@ -8,6 +8,9 @@ publish = false
 
 [dependencies]
 p3-air.workspace = true
+# Optional: BabyBear Poseidon2 hash stack, enabled by the `bb-hash` feature.
+p3-baby-bear = { path = "../baby-bear", optional = true }
+rand_chacha = { version = "0.10", default-features = false, optional = true }
 p3-brakedown.workspace = true
 p3-basefold.workspace = true
 p3-challenger.workspace = true
@@ -35,6 +38,11 @@ parallel = ["p3-multi-stark/parallel"]
 # distance ⇒ few queries & smaller proofs, but superlinear Vandermonde encoding.
 ligero = []
 basefold = []
+# Swap the Merkle/Fiat-Shamir hash from Poseidon2-over-ed25519 to Poseidon2-over-BabyBear
+# (SplitFieldHasher + DuplexChallengerCF). ~100x cheaper per permutation inside the 32-bit
+# OpenVM verifier; the committed data, linear code, and sumcheck stay over ed25519. This is
+# the recursion/guest operating point; the default keeps the pure-ed25519 hash for host comparison.
+bb-hash = ["dep:p3-baby-bear", "dep:rand_chacha"]
 count-ops = ["p3-ed25519/count-ops"]
 
 [lints]

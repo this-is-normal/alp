@@ -20,6 +20,13 @@ paste.workspace = true
 rand.workspace = true
 serde = { workspace = true, features = ["derive", "alloc"] }
 
+# Guest-only: ed25519 field mul routes through OpenVM's modular-arithmetic precompile
+# (moduli_declare!). Not pulled on host (target-gated), so host builds are unaffected.
+[target.'cfg(target_os = "zkvm")'.dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1" }
+openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1", default-features = false }
+
 [dev-dependencies]
 p3-field-testing = { path = "../field-testing" }
 

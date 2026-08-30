@@ -60,7 +60,17 @@ impl Ed25519 {
     /// Any value is accepted and automatically reduced modulo P.
     #[inline]
     pub const fn new(value: [u64; 4]) -> Self {
-        Self::new_monty(monty_mul(ED25519_MONTY_R_SQ, value))
+        #[cfg(not(target_os = "zkvm"))]
+        { Self::new_monty(monty_mul(ED25519_MONTY_R_SQ, value)) }
+        #[cfg(target_os = "zkvm")]
+        {
+            // canonical reduce: value < 2^256 < 3P, so at most two subtractions of P.
+            let (v1, u1) = wrapping_sub(value, ED25519_PRIME);
+            let value = if u1 { value } else { v1 };
+            let (v2, u2) = wrapping_sub(value, ED25519_PRIME);
+            let value = if u2 { value } else { v2 };
+            Self::new_monty(value)
+        }
     }
 
     /// Convert a `[[u64; 4]; N]` array to an array of field elements.
@@ -89,23 +99,23 @@ impl Ed25519 {
     #[inline]
     #[allow(clippy::needless_pass_by_value)]
     pub fn from_biguint(value: BigUint) -> Option<Self> {
-        let digits = value.to_u64_digits();
-        let num_dig = digits.len();
-
-        match num_dig {
-            0 => Some(Self::ZERO),
-            1..=4 => {
-                let mut inner = [0; 4];
-                inner[..num_dig].copy_from_slice(&digits);
-
-                // We cannot assume the value is less than the prime here (a 4-limb value can be
-                // as large as `2^256 - 1 > P`). `monty_mul` requires its left argument to be `< P`,
-                // so we pass `R^2` (which is `< P`) on the left and `inner` on the right. The result
-                // is `inner * R^2 * 2^{-256} = inner * R mod P`, i.e. the Montgomery form of
-                // `inner mod P`, correctly reduced.
-                Some(Self::new_monty(monty_mul(ED25519_MONTY_R_SQ, inner)))
+        #[cfg(target_os = "zkvm")]
+        { Some(Self::new_monty(zk::from_bu(value))) }
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            let digits = value.to_u64_digits();
+            let num_dig = digits.len();
+            match num_dig {
+                0 => Some(Self::ZERO),
+                1..=4 => {
+                    let mut inner = [0; 4];
+                    inner[..num_dig].copy_from_slice(&digits);
+                    // A 4-limb value can be up to `2^256 - 1 > P`; `monty_mul(R^2, inner)` yields
+                    // the Montgomery form of `inner mod P`, correctly reduced.
+                    Some(Self::new_monty(monty_mul(ED25519_MONTY_R_SQ, inner)))
+                }
+                _ => None, // Too many digits for ed25519
             }
-            _ => None, // Too many digits for ed25519
         }
     }
 
@@ -115,6 +125,10 @@ impl Ed25519 {
     ///
     /// Returns None if the byte array is not exactly 32 bytes long or if the value
     /// represented by the byte array is not less than the ed25519 prime.
+    ///
+    /// The monty-byte parser (inverse of [`Self::into_bytes`]); kept as a utility even though
+    /// serde now uses the canonical little-endian encoding (portable host↔zkvm).
+    #[allow(dead_code)]
     #[inline]
     pub(crate) fn from_bytes_monty(bytes: &[u8]) -> Option<Self> {
         if bytes.len() != 32 {
@@ -136,11 +150,48 @@ impl Ed25519 {
     }
 }
 
+#[cfg(target_os = "zkvm")]
+pub(crate) mod zk {
+    use num_bigint::BigUint;
+    use openvm_algebra_guest::IntMod;
+    openvm_algebra_moduli_macros::moduli_declare! {
+        Ed25519Fp { modulus = "57896044618658097711785492504343953926634992332820282019728792003956564819949" },
+    }
+    #[inline]
+    fn to_fp(v: [u64; 4]) -> Ed25519Fp {
+        let bytes: [u8; 32] = unsafe { core::mem::transmute(v.map(u64::to_le_bytes)) };
+        Ed25519Fp::from_le_bytes_unchecked(&bytes)
+    }
+    #[inline]
+    fn from_fp(x: &Ed25519Fp) -> [u64; 4] {
+        let b = x.as_le_bytes();
+        core::array::from_fn(|i| u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap()))
+    }
+    #[inline]
+    pub(crate) fn mul(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+        from_fp(&(&to_fp(a) * &to_fp(b)))
+    }
+    #[inline]
+    pub(crate) fn from_bu(b: BigUint) -> [u64; 4] {
+        // b is always < p (curve constants + validated deserialize); canonical repr is
+        // just its little-endian bytes packed into [u64; 4] (no IntMod/num-bigint-version dep).
+        let bytes = b.to_bytes_le();
+        let mut buf = [0u8; 32];
+        let n = core::cmp::min(bytes.len(), 32);
+        buf[..n].copy_from_slice(&bytes[..n]);
+        core::array::from_fn(|i| u64::from_le_bytes(buf[i * 8..i * 8 + 8].try_into().unwrap()))
+    }
+}
+
 impl Serialize for Ed25519 {
-    /// Serializes to raw bytes, which correspond to the Montgomery representation of the field element.
+    /// Serializes to the canonical little-endian 32-byte representation (matches host & zkvm reprs).
     #[inline]
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        serializer.serialize_bytes(&self.into_bytes())
+        let mut bytes = [0u8; 32];
+        for (i, b) in self.as_canonical_biguint().to_bytes_le().into_iter().take(32).enumerate() {
+            bytes[i] = b;
+        }
+        serializer.serialize_bytes(&bytes)
     }
 }
 
@@ -151,9 +202,14 @@ impl<'de> Deserialize<'de> for Ed25519 {
     #[inline]
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let bytes: Vec<u8> = Deserialize::deserialize(d)?;
-
-        Self::from_bytes_monty(&bytes)
-            .ok_or_else(|| serde::de::Error::custom("Invalid field element"))
+        if bytes.len() != 32 {
+            return Err(serde::de::Error::custom("Invalid field element"));
+        }
+        let bu = BigUint::from_bytes_le(&bytes);
+        if bu >= to_biguint(ED25519_PRIME) {
+            return Err(serde::de::Error::custom("Invalid field element"));
+        }
+        Self::from_biguint(bu).ok_or_else(|| serde::de::Error::custom("Invalid field element"))
     }
 }
 
@@ -204,18 +260,32 @@ impl PrimeCharacteristicRing for Ed25519 {
     /// The Montgomery form of the ed25519 field element 1.
     ///
     /// Equal to `2^256 mod P = 38`.
+    #[cfg(not(target_os = "zkvm"))]
     const ONE: Self = Self::new_monty([0x0000000000000026, 0, 0, 0]);
+    #[cfg(target_os = "zkvm")]
+    const ONE: Self = Self::new_monty([1, 0, 0, 0]);
 
     /// The Montgomery form of the ed25519 field element 2.
     ///
     /// Equal to `2^257 mod P = 76`.
+    #[cfg(not(target_os = "zkvm"))]
     const TWO: Self = Self::new_monty([0x000000000000004c, 0, 0, 0]);
+    #[cfg(target_os = "zkvm")]
+    const TWO: Self = Self::new_monty([2, 0, 0, 0]);
 
     /// The Montgomery form of the ed25519 field element -1.
     ///
     /// Equal to `-2^256 mod P = P - 38 = 57896044618658097711785492504343953926634992332820282019728792003956564819911`.
+    #[cfg(not(target_os = "zkvm"))]
     const NEG_ONE: Self = Self::new_monty([
         0xffffffffffffffc7,
+        0xffffffffffffffff,
+        0xffffffffffffffff,
+        0x7fffffffffffffff,
+    ]);
+    #[cfg(target_os = "zkvm")]
+    const NEG_ONE: Self = Self::new_monty([
+        0xffffffffffffffec,
         0xffffffffffffffff,
         0xffffffffffffffff,
         0x7fffffffffffffff,
@@ -236,7 +306,10 @@ impl PrimeCharacteristicRing for Ed25519 {
     #[inline]
     fn square(&self) -> Self {
         #[cfg(feature = "count-ops")] crate::counters::on_sq();
-        Self::new_monty(monty_mul(self.value, self.value))
+        #[cfg(not(target_os = "zkvm"))]
+        { Self::new_monty(monty_mul(self.value, self.value)) }
+        #[cfg(target_os = "zkvm")]
+        { Self::new_monty(zk::mul(self.value, self.value)) }
     }
 }
 
@@ -376,7 +449,10 @@ impl Field for Ed25519 {
     /// the `Field` trait bound.
     ///
     /// Equal to the Montgomery form of `2`, i.e. `2 * 2^256 mod P = 76`.
+    #[cfg(not(target_os = "zkvm"))]
     const GENERATOR: Self = Self::new_monty([0x000000000000004c, 0, 0, 0]);
+    #[cfg(target_os = "zkvm")]
+    const GENERATOR: Self = Self::new_monty([2, 0, 0, 0]);
 
     #[inline]
     fn is_zero(&self) -> bool {
@@ -411,8 +487,10 @@ impl QuotientMap<u128> for Ed25519 {
     fn from_int(int: u128) -> Self {
         // Need to convert into Monty form. As the monty reduction strips out a factor of `R`,
         // we can do this by multiplying by `R^2` and doing a monty reduction.
-        let monty_form = monty_mul(ED25519_MONTY_R_SQ, [int as u64, (int >> 64) as u64, 0, 0]);
-        Self::new_monty(monty_form)
+        #[cfg(not(target_os = "zkvm"))]
+        { let monty_form = monty_mul(ED25519_MONTY_R_SQ, [int as u64, (int >> 64) as u64, 0, 0]); Self::new_monty(monty_form) }
+        #[cfg(target_os = "zkvm")]
+        { Self::new_monty([int as u64, (int >> 64) as u64, 0, 0]) }
     }
 
     /// Due to the size of the ed25519 prime, the input value is always canonical.
@@ -458,8 +536,10 @@ impl PrimeField for Ed25519 {
     fn as_canonical_biguint(&self) -> BigUint {
         // `monty_mul` strips out a factor of `R` so multiplying by `1` converts a montgomery
         // representation into a canonical representation.
-        let out_val = monty_mul(self.value, [1, 0, 0, 0]);
-        to_biguint(out_val)
+        #[cfg(not(target_os = "zkvm"))]
+        { let out_val = monty_mul(self.value, [1, 0, 0, 0]); to_biguint(out_val) }
+        #[cfg(target_os = "zkvm")]
+        { to_biguint(self.value) }
     }
 }
 
@@ -523,7 +603,10 @@ impl Mul for Ed25519 {
     #[inline]
     fn mul(self, rhs: Self) -> Self {
         #[cfg(feature = "count-ops")] crate::counters::on_mul();
-        Self::new_monty(monty_mul(self.value, rhs.value))
+        #[cfg(not(target_os = "zkvm"))]
+        { Self::new_monty(monty_mul(self.value, rhs.value)) }
+        #[cfg(target_os = "zkvm")]
+        { Self::new_monty(zk::mul(self.value, rhs.value)) }
     }
 }
 

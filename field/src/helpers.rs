@@ -328,6 +328,22 @@ pub fn squeeze_field_order_num_limbs<PF: PrimeField, TF: PrimeField32>() -> usiz
     count.saturating_sub(1)
 }
 
+/// Smallest `n` such that `|TF|^n >= |SF|`: number of base-`|TF|` limbs needed to
+/// represent **any** `SF` element injectively (the inverse of a squeeze). Used by
+/// the cross-field Merkle hasher and challenger to (de)compose big-field elements.
+#[must_use]
+pub fn inject_field_order_num_limbs<SF: PrimeField, TF: PrimeField32>() -> usize {
+    let p = BigUint::from(TF::ORDER_U32);
+    let order = SF::order();
+    let mut count = 0usize;
+    let mut power = BigUint::from(1u32);
+    while power < order {
+        power *= &p;
+        count += 1;
+    }
+    count.max(1)
+}
+
 /// Split `val` into `num_limbs` little-endian base-`|TF|` limbs, each mapped into `TF`.
 ///
 /// Decomposes `val` as `c0 + c1·p + c2·p² + …` (p = `TF::ORDER_U32`), returning
