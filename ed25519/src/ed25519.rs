@@ -527,17 +527,15 @@ impl_div_methods!(Ed25519, Ed25519);
 impl Distribution<Ed25519> for StandardUniform {
     #[inline]
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Ed25519 {
-        // Simple implementation of rejection sampling:
+        // Rejection sampling constructed BY VALUE (repr-independent) so the same RNG stream yields
+        // the same field element on the Montgomery host and the canonical zkvm guest
+        // (native-field-fork). `from_bytes_monty` treats the bytes as internal limbs (Montgomery vs
+        // canonical) -> different values, which breaks cross-platform Brakedown/Basefold code matrices.
         loop {
             let mut trial_element: [u8; 32] = rng.random();
-
-            // Set the top bit to 0 as ed25519's prime is a 255-bit number (`P < 2^255`).
-            // `from_bytes_monty` expects little endian input, so we adjust byte 31:
             trial_element[31] &= (1_u8 << 7) - 1;
-
-            // Only the 19 values in `[2^255 - 19, 2^255)` are rejected here.
-            let x = Ed25519::from_bytes_monty(&trial_element);
-            if let Some(val) = x {
+            let bi = num_bigint::BigUint::from_bytes_le(&trial_element);
+            if let Some(val) = Ed25519::from_biguint(bi) {
                 return val;
             }
         }
