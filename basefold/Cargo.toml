@@ -1,0 +1,29 @@
+[package]
+name = "p3-basefold"
+description = "Basefold multilinear PCS over a foldable random linear code (ed25519-native, no FFT). M1: the foldable code."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-field.workspace = true
+p3-util.workspace = true
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-matrix.workspace = true
+p3-sumcheck.workspace = true
+p3-multilinear-util.workspace = true
+
+rand = { workspace = true }
+rand_chacha = { version = "0.10", default-features = false }
+serde = { workspace = true, features = ["derive", "alloc"] }
+tracing.workspace = true
+
+[dev-dependencies]
+p3-ed25519 = { path = "../ed25519" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-symmetric = { path = "../symmetric" }
+
+[lints]
+workspace = true

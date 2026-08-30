@@ -14,6 +14,8 @@ use p3_brakedown::BrakedownCode as RealBrakedownCode;
 #[cfg(feature = "ligero")]
 use p3_brakedown::ReedSolomonCode;
 use p3_brakedown::{BrakedownMlPcs, LinearCode, TensorPcs};
+#[cfg(feature = "basefold")]
+use p3_basefold::{BasefoldMlPcs, BasefoldPcs, RandomFoldableCode};
 use p3_challenger::DuplexChallengerPF;
 use p3_ed25519::{
     ED25519_POSEIDON2_FULL_ROUNDS, ED25519_POSEIDON2_PARTIAL_ROUNDS_3, Ed25519, Poseidon2Ed25519,
@@ -22,6 +24,8 @@ use p3_merkle_tree::MerkleTreeMmcs;
 use p3_multi_stark::config::MultiStarkConfig;
 use p3_sumcheck::layout::{Layout, PrefixProver, Table, Witness};
 use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
+#[cfg(feature = "count-ops")]
+use p3_symmetric::{CryptographicPermutation, Permutation};
 use p3_util::log2_ceil_usize;
 use rand::SeedableRng;
 use rand::rngs::SmallRng;
@@ -40,7 +44,26 @@ const RATE: usize = 2;
 /// Merkle digest / sponge output size in field elements.
 const OUT: usize = 1;
 
+#[cfg(not(feature = "count-ops"))]
 type Perm = Poseidon2Ed25519<WIDTH>;
+#[cfg(feature = "count-ops")]
+type Perm = CountingPerm;
+
+/// Counts every Poseidon2-over-Ed25519 permutation (a hash invocation). Locally the hash is over
+/// Ed25519, so its muls are also counted in `MUL`; counting perms lets us subtract them to isolate
+/// the PCS *arithmetic* muls (on vultr2/guest the hash is BabyBear, so this subtraction is moot).
+#[cfg(feature = "count-ops")]
+#[derive(Clone, Debug)]
+pub struct CountingPerm(Poseidon2Ed25519<WIDTH>);
+#[cfg(feature = "count-ops")]
+impl Permutation<[Ed25519; WIDTH]> for CountingPerm {
+    fn permute_mut(&self, input: &mut [Ed25519; WIDTH]) {
+        p3_ed25519::counters::on_perm();
+        self.0.permute_mut(input);
+    }
+}
+#[cfg(feature = "count-ops")]
+impl CryptographicPermutation<[Ed25519; WIDTH]> for CountingPerm {}
 type MyHash = PaddingFreeSponge<Perm, WIDTH, RATE, OUT>;
 type MyCompress = TruncatedPermutation<Perm, 2, OUT, WIDTH>;
 type MyMmcs = MerkleTreeMmcs<Ed25519, Ed25519, MyHash, MyCompress, 2, OUT>;
@@ -58,8 +81,12 @@ pub type Code = RealBrakedownCode<F, EF>;
 #[cfg(feature = "ligero")]
 pub type Code = ReedSolomonCode<F>;
 
-/// The tensor multilinear PCS used by multi-stark (generic over the code above).
+/// The multilinear PCS used by multi-stark. Default = the Brakedown tensor PCS; with
+/// `--features basefold` = the ed25519-native Basefold PCS (polylog verifier).
+#[cfg(not(feature = "basefold"))]
 pub type CodePcs = BrakedownMlPcs<F, EF, Code, MyMmcs, L>;
+#[cfg(feature = "basefold")]
+pub type CodePcs = BasefoldMlPcs<F, MyMmcs, L>;
 
 /// Fixed RNG seed for the (DEMO-grade) Poseidon2 round constants; seeding
 /// deterministically makes the prover and verifier build the identical permutation.
@@ -109,11 +136,32 @@ const BRAKEDOWN_FOLDING: usize = 1;
 /// generic `new_from_rng` is used).
 fn perm() -> Perm {
     let mut rng = SmallRng::seed_from_u64(POSEIDON2_SEED);
-    Poseidon2Ed25519::<WIDTH>::new_from_rng(
+    let inner = Poseidon2Ed25519::<WIDTH>::new_from_rng(
         ED25519_POSEIDON2_FULL_ROUNDS,
         ED25519_POSEIDON2_PARTIAL_ROUNDS_3,
         &mut rng,
-    )
+    );
+    #[cfg(not(feature = "count-ops"))]
+    {
+        inner
+    }
+    #[cfg(feature = "count-ops")]
+    {
+        CountingPerm(inner)
+    }
+}
+
+/// Calibration: ed25519 muls consumed by ONE Poseidon2 permutation (to subtract hashing from the
+/// verify mul-count and isolate PCS arithmetic).
+#[cfg(feature = "count-ops")]
+pub fn muls_per_perm() -> u64 {
+    use p3_field::PrimeCharacteristicRing;
+    let p = perm();
+    let mut st = [F::ZERO; WIDTH];
+    p3_ed25519::counters::reset();
+    p.permute_mut(&mut st);
+    let (m, _, _) = p3_ed25519::counters::snapshot();
+    m
 }
 
 /// Build one Brakedown PCS sized for a `2^log_height`-row, `width`-column trace.
@@ -121,6 +169,18 @@ fn perm() -> Perm {
 /// The committed polynomial stacks every trace column, so the tensor scheme is
 /// sized for the stacked variable count `log_height + ceil(log2(width))`, split
 /// `log_rows = stacked / 2` row variables and the rest as columns.
+#[cfg(feature = "basefold")]
+fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+    // Basefold commits the stacked polynomial (num_variables = log_height + ceil(log2 width)).
+    let num_variables = log_height + log2_ceil_usize(width);
+    let mmcs = MyMmcs::new(MyHash::new(perm()), MyCompress::new(perm()), 0);
+    // Rate 1/4 foldable code, ChaCha-seeded (cross-platform). 32 queries = functional demo.
+    let code = RandomFoldableCode::<F>::new(num_variables, 4, 0xBA5E_F01D);
+    let num_queries = 32;
+    BasefoldMlPcs::new(BasefoldPcs::new(code, mmcs, num_queries))
+}
+
+#[cfg(not(feature = "basefold"))]
 fn build_pcs(log_height: usize, width: usize) -> CodePcs {
     let stacked_num_variables = log_height + log2_ceil_usize(width);
     let log_rows = stacked_num_variables / 2;
@@ -189,9 +249,19 @@ impl MultiStarkConfig for EdDsaConfig {
         L::new_witness(tables, BRAKEDOWN_FOLDING)
     }
 
+    #[cfg(not(feature = "basefold"))]
     fn committed_table<'a>(
         &self,
         prover_data: &'a p3_brakedown::BrakedownProverData<F, EF, MyMmcs, L>,
+        table_index: usize,
+    ) -> &'a Table<F> {
+        prover_data.table(table_index)
+    }
+
+    #[cfg(feature = "basefold")]
+    fn committed_table<'a>(
+        &self,
+        prover_data: &'a p3_basefold::BasefoldMlProverData<F, MyMmcs, L>,
         table_index: usize,
     ) -> &'a Table<F> {
         prover_data.table(table_index)

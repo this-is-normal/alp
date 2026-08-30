@@ -459,6 +459,7 @@ impl Add for Ed25519 {
 
     #[inline]
     fn add(self, rhs: Self) -> Self {
+        #[cfg(feature = "count-ops")] crate::counters::on_add();
         let lhs = self.value;
         let rhs = rhs.value;
 
@@ -483,6 +484,7 @@ impl Sub for Ed25519 {
 
     #[inline]
     fn sub(self, rhs: Self) -> Self {
+        #[cfg(feature = "count-ops")] crate::counters::on_add();
         let lhs = self.value;
         let rhs = rhs.value;
 
@@ -511,6 +513,7 @@ impl Mul for Ed25519 {
 
     #[inline]
     fn mul(self, rhs: Self) -> Self {
+        #[cfg(feature = "count-ops")] crate::counters::on_mul();
         Self::new_monty(monty_mul(self.value, rhs.value))
     }
 }

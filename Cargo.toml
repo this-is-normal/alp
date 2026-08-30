@@ -8,6 +8,7 @@ members = [
     "blake3-air",
     "bn254",
     "brakedown",
+    "basefold",
     "challenger",
     "circle",
     "commit",
@@ -114,6 +115,7 @@ p3-blake3 = { path = "blake3", version = "0.6.0" }
 p3-blake3-air = { path = "blake3-air", version = "0.6.0" }
 p3-bn254 = { path = "bn254", version = "0.6.0" }
 p3-brakedown = { path = "brakedown", version = "0.6.0" }
+p3-basefold = { path = "basefold", version = "0.6.0" }
 p3-challenger = { path = "challenger", version = "0.6.0" }
 p3-circle = { path = "circle", version = "0.6.0" }
 p3-commit = { path = "commit", version = "0.6.0" }

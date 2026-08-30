@@ -9,6 +9,7 @@ publish = false
 [dependencies]
 p3-air.workspace = true
 p3-brakedown.workspace = true
+p3-basefold.workspace = true
 p3-challenger.workspace = true
 p3-ed25519.workspace = true
 p3-ed25519-air.workspace = true
@@ -33,6 +34,8 @@ parallel = ["p3-multi-stark/parallel"]
 # Swap the tensor PCS's code from Brakedown to Reed-Solomon (→ Ligero): high
 # distance ⇒ few queries & smaller proofs, but superlinear Vandermonde encoding.
 ligero = []
+basefold = []
+count-ops = ["p3-ed25519/count-ops"]
 
 [lints]
 workspace = true
