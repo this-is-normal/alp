@@ -117,6 +117,16 @@ pub struct EdDsaPreprocessedCols<T> {
     pub is_sgc_r: T,
     /// Row `num_bits + 2`: `R + [k]A`, and the final equality against `[s]B`.
     pub is_add: T,
+
+    /// First row of each stacked signature instance (row `i * h`, `h = trace_height`). Gates the
+    /// per-instance ladder boundary constraints. For a single instance this is 1 only on row 0,
+    /// so it reproduces `when_first_row` for the boundary.
+    pub is_instance_first: T,
+    /// Last row of each stacked signature instance (row `(i+1) * h - 1`). Gates OFF the shared-
+    /// column propagation across the seam into the next instance, so stacked instances are
+    /// independent. For a single instance this is 1 only on the final row, where `when_transition`
+    /// is already inactive, so it is a no-op there.
+    pub is_instance_last: T,
 }
 
 pub const NUM_EDDSA_PREPROCESSED_COLS: usize = size_of::<EdDsaPreprocessedCols<u8>>();

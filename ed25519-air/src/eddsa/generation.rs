@@ -118,7 +118,27 @@ pub fn generate_preprocessed_trace<F: Field>(
     base_b: Point<F>,
     num_bits: usize,
 ) -> RowMajorMatrix<F> {
-    let height = trace_height(num_bits);
+    generate_preprocessed_trace_batch(d, base_b, num_bits, 1)
+}
+
+/// Stacked ("vertical") version of [`generate_preprocessed_trace`]: tiles the single-instance
+/// selector pattern `num_instances` times so `num_instances` signatures share ONE table of
+/// `num_instances * trace_height(num_bits)` rows.
+///
+/// Two things make the tiling correct: the fixed-base doubling chain (`2^i * B`) is **restarted**
+/// at the top of every instance, and each instance is bracketed by `is_instance_first`
+/// (its row 0, gating the ladder boundary) and `is_instance_last` (its final row, gating OFF the
+/// shared-column propagation into the next instance). Every other selector is purely local
+/// (`row % h`), so all the row-type constraints tile for free.
+pub fn generate_preprocessed_trace_batch<F: Field>(
+    d: F,
+    base_b: Point<F>,
+    num_bits: usize,
+    num_instances: usize,
+) -> RowMajorMatrix<F> {
+    assert!(num_instances >= 1, "need at least one instance");
+    let h = trace_height(num_bits);
+    let height = h * num_instances;
     let mut trace_values = F::zero_vec(height * NUM_EDDSA_PREPROCESSED_COLS);
 
     let (mut x_dbl, mut y_dbl) = base_b;
@@ -126,8 +146,14 @@ pub fn generate_preprocessed_trace<F: Field>(
         .chunks_mut(NUM_EDDSA_PREPROCESSED_COLS)
         .enumerate()
     {
+        let local = row % h;
+        // Restart the fixed-base doubling chain at the start of each stacked instance.
+        if local == 0 {
+            (x_dbl, y_dbl) = base_b;
+        }
+
         let cols: &mut EdDsaPreprocessedCols<F> = chunk.borrow_mut();
-        let is_ladder = row < num_bits;
+        let is_ladder = local < num_bits;
 
         let (dbl_x, dbl_y) = if is_ladder {
             let cur = (x_dbl, y_dbl);
@@ -143,11 +169,13 @@ pub fn generate_preprocessed_trace<F: Field>(
             dbl_x,
             dbl_y,
             is_ladder: F::from_bool(is_ladder),
-            is_ladder_step: F::from_bool(row + 1 < num_bits),
-            is_ladder_last: F::from_bool(row == num_bits - 1),
-            is_sgc_a: F::from_bool(row == sgc_a_row(num_bits)),
-            is_sgc_r: F::from_bool(row == sgc_r_row(num_bits)),
-            is_add: F::from_bool(row == add_row(num_bits)),
+            is_ladder_step: F::from_bool(local + 1 < num_bits),
+            is_ladder_last: F::from_bool(local == num_bits - 1),
+            is_sgc_a: F::from_bool(local == sgc_a_row(num_bits)),
+            is_sgc_r: F::from_bool(local == sgc_r_row(num_bits)),
+            is_add: F::from_bool(local == add_row(num_bits)),
+            is_instance_first: F::from_bool(local == 0),
+            is_instance_last: F::from_bool(local == h - 1),
         };
     }
 

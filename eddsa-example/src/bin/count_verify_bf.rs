@@ -20,7 +20,7 @@ fn main() {
     let log_height = log2_ceil_usize(trace_height(num_bits));
     let (d_, base_b_, l) = (d(), base_b(), subgroup_order());
     let inst = valid_instance(num_bits, 3, 5, 7);
-    let air = EdDsaAir { d: d_, base_b: base_b_, num_bits };
+    let air = EdDsaAir { d: d_, base_b: base_b_, num_bits, log_instances: 0 };
     let trace = generate_trace_rows(d_, base_b_, &l, inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let pis = public_values(inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);

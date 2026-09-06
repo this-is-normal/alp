@@ -32,12 +32,14 @@
 extern crate alloc;
 
 mod brakedown_code;
+pub mod params;
 mod pcs;
 mod prescribed_pcs;
 mod reed_solomon;
 mod sparse;
 
 pub use brakedown_code::{BrakedownCode, BrakedownParams};
+pub use params::{Preset, brakedown_num_queries};
 pub use pcs::{TensorPcs, TensorProof, TensorProverData, TensorPcsError};
 pub use prescribed_pcs::{
     BrakedownMlPcs, BrakedownPcsError, BrakedownProof, BrakedownProverData,

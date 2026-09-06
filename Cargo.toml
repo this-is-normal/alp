@@ -37,6 +37,7 @@ members = [
     "multi-fib-example",
     "multi-stark",
     "multilinear-util",
+    "pcs-profile",
     "poseidon1",
     "poseidon1-air",
     "poseidon2",

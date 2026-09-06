@@ -54,7 +54,7 @@ fn main() {
     let instance = valid_instance(num_bits, 3, 5, 7);
     let (d, base_b, l) = (d(), base_b(), subgroup_order());
 
-    let air = EdDsaAir { d, base_b, num_bits };
+    let air = EdDsaAir { d, base_b, num_bits, log_instances: 0 };
     let trace = generate_trace_rows(
         d,
         base_b,

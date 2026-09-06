@@ -266,11 +266,15 @@ const LIGERO_RATE: usize = 2;
 /// Target security for the Ligero query count (bits).
 #[cfg(feature = "ligero")]
 const TARGET_SECURITY_BITS: usize = 100;
-/// Column queries for the Brakedown path. DEMO-grade (functional, not secure):
-/// at these sizes Brakedown's required query count (thousands) exceeds the
-/// codeword, so no secure regime exists — see notes.
+/// Target soundness for the Brakedown path. The column-query count is now
+/// distance-derived from the chosen preset (see `p3_brakedown::params`):
+/// `t = ⌈λ/−log₂(1−e)⌉`, clamped to the codeword length. Replaces the old demo `32`.
 #[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
-const DEMO_QUERIES: usize = 32;
+const BRAKEDOWN_SECURITY_BITS: usize = 100;
+/// `false` = provable δ/3 radius (Ligero/Roth–Zémor); `true` = conjectured δ/2
+/// (Diamond–Posen Conjecture-1, the Reed–Solomon-proven analogue).
+#[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
+const BRAKEDOWN_CONJECTURED: bool = false;
 
 /// Number of column queries for a Reed–Solomon (Ligero) tensor test at
 /// `security_bits` bits, under the **list-decoding-up-to-capacity** conjecture:
@@ -303,34 +307,48 @@ fn build_pcs(log_height: usize, width: usize) -> CodePcs {
 /// Build one Brakedown/Ligero tensor PCS sized for a `2^log_height`-row, `width`-column trace.
 ///
 /// The committed polynomial stacks every trace column, so the tensor scheme is
-/// sized for the stacked variable count `log_height + ceil(log2(width))`, split
-/// `log_rows = stacked / 2` row variables and the rest as columns.
+/// sized for the stacked variable count `log_height + ceil(log2(width))`. Brakedown uses the
+/// paper's optimal row/column split (`optimal_log_rows`); the RS/Ligero path uses a square split.
 #[cfg(not(feature = "basefold"))]
 fn build_pcs(log_height: usize, width: usize) -> CodePcs {
     let stacked_num_variables = log_height + log2_ceil_usize(width);
-    let log_rows = stacked_num_variables / 2;
-    let cols = 1 << (stacked_num_variables - log_rows);
 
     let mmcs = build_mmcs();
+
+    // Small-proof Brakedown preset (Haböck SdigCode6, δ=0.070, weights 9/12) with a real
+    // distance-derived query count `bd_t` (instead of the old demo constant).
+    #[cfg(not(feature = "ligero"))]
+    let bd_preset = p3_brakedown::params::small_proof();
+    #[cfg(not(feature = "ligero"))]
+    let bd_t = bd_preset.num_queries(BRAKEDOWN_SECURITY_BITS, BRAKEDOWN_CONJECTURED);
+
+    // Optimal (paper) row/column split for Brakedown; square for the RS/Ligero path.
+    #[cfg(not(feature = "ligero"))]
+    let log_rows =
+        p3_brakedown::params::optimal_log_rows(stacked_num_variables, bd_t, &bd_preset.params);
+    #[cfg(feature = "ligero")]
+    let log_rows = stacked_num_variables / 2;
+    let cols = 1 << (stacked_num_variables - log_rows);
 
     #[cfg(all(not(feature = "ligero"), not(feature = "bb-hash")))]
     let code = {
         // Recursive Brakedown code; SmallRng-seeded so prover and verifier build the identical code.
         let mut code_rng = SmallRng::seed_from_u64(BRAKEDOWN_CODE_SEED);
-        RealBrakedownCode::from_message_len(cols, &mut code_rng)
+        RealBrakedownCode::from_message_len_with_params(cols, &bd_preset.params, &mut code_rng)
     };
     #[cfg(all(not(feature = "ligero"), feature = "bb-hash"))]
     let code = {
         // ChaCha (portable) so the x86 prover and riscv32 verifier build identical matrices.
         let mut code_rng = ChaCha8Rng::seed_from_u64(BRAKEDOWN_CODE_SEED);
-        RealBrakedownCode::from_message_len(cols, &mut code_rng)
+        RealBrakedownCode::from_message_len_with_params(cols, &bd_preset.params, &mut code_rng)
     };
     #[cfg(feature = "ligero")]
     // Reed–Solomon `[n, k]` with k = cols (power of two) and n = rate·cols.
     let code = ReedSolomonCode::new(cols, LIGERO_RATE * cols);
 
     #[cfg(not(feature = "ligero"))]
-    let num_queries = core::cmp::min(DEMO_QUERIES, code.codeword_len());
+    // Distance-derived (provable δ/3 by default), clamped to the codeword length.
+    let num_queries = core::cmp::min(bd_t, code.codeword_len());
     #[cfg(feature = "ligero")]
     // Security-derived: t = ⌈λ / −log₂(1 − δ)⌉, clamped to the codeword length.
     let num_queries = core::cmp::min(

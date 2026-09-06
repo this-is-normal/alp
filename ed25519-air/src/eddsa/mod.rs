@@ -21,6 +21,7 @@ pub use columns::{
     shared_cols_mut,
 };
 pub use generation::{
-    add_row, bits_to_field, double_and_add, generate_preprocessed_trace, generate_trace_rows,
+    add_row, bits_to_field, double_and_add, generate_preprocessed_trace,
+    generate_preprocessed_trace_batch, generate_trace_rows,
     ladder_results, public_values, sgc_a_row, sgc_r_row, trace_height,
 };

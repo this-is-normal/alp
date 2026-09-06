@@ -107,10 +107,10 @@ where
     deserialize = "Val: serde::de::DeserializeOwned, EF: serde::de::DeserializeOwned, M::Proof: serde::de::DeserializeOwned"
 ))]
 pub struct TensorProof<Val: Send + Sync + Clone, EF, M: Mmcs<Val>> {
-    /// The evaluation combined row `w = bᵀM` (length `cols`).
+    /// The single combined row `w = bᵀM` (length `cols`). With a **random** opening point, `b`
+    /// (the eq-weights of the point's row variables) is a Diamond–Posen tensor combination that
+    /// serves as BOTH the evaluation and the proximity check — no separate proximity row is needed.
     pub w: Vec<EF>,
-    /// The proximity combined row `w' = γᵀM` (length `cols`).
-    pub w_prox: Vec<EF>,
     /// One Merkle opening per queried column (in transcript order).
     pub openings: Vec<BatchOpening<Val, M>>,
 }
@@ -120,10 +120,8 @@ pub struct TensorProof<Val: Send + Sync + Clone, EF, M: Mmcs<Val>> {
 pub enum TensorPcsError<E> {
     /// A Merkle column opening failed.
     Merkle(E),
-    /// The evaluation consistency check `⟨b, col⟩ = Encode(w)[c]` failed at a query.
+    /// The combined consistency+proximity check `⟨b, col⟩ = Encode(w)[c]` failed at a query.
     EvalCheckFailed { query: usize },
-    /// The proximity check `⟨γ, col⟩ = Encode(w')[c]` failed at a query.
-    ProximityCheckFailed { query: usize },
     /// The claimed value did not equal `⟨w, a⟩`.
     ClaimedValueMismatch,
     /// The proof carried the wrong number of column openings.
@@ -204,20 +202,14 @@ where
         Ch: FieldChallenger<Val> + CanSampleBits<usize>,
     {
         assert_eq!(point.num_variables(), self.num_variables(), "point arity");
-        let rows = self.rows();
 
         let (b, a) = self.eq_weights(point);
 
-        // Proximity challenge, then γ = (1, η, η², …) of length `rows`.
-        let eta: EF = challenger.sample_algebra_element();
-        let gamma = powers(eta, rows);
-
-        // Combined rows w = bᵀM and w' = γᵀM (length cols each).
+        // Consolidated (Diamond–Posen): a single combined row w = bᵀM. Because the opening point
+        // is random, b (its row-variable eq-weights, a tensor combination) doubles as the proximity
+        // combination — the one per-column check below is both consistency AND proximity.
         let w = self.combine_rows(&prover_data.msg, &b);
-        let w_prox = self.combine_rows(&prover_data.msg, &gamma);
-
         challenger.observe_algebra_slice(&w);
-        challenger.observe_algebra_slice(&w_prox);
 
         // Claimed evaluation p(z) = ⟨w, a⟩.
         let value = dot(&w, &a);
@@ -229,7 +221,7 @@ where
             .map(|&idx| self.mmcs.open_batch(idx, &prover_data.mmcs_data))
             .collect();
 
-        (value, TensorProof { w, w_prox, openings })
+        (value, TensorProof { w, openings })
     }
 
     /// Verify an opening proof for `point`, checking the claimed `value`.
@@ -250,10 +242,7 @@ where
 
         // Replay the transcript exactly as the prover drove it.
         challenger.observe(commitment.clone());
-        let eta: EF = challenger.sample_algebra_element();
-        let gamma = powers(eta, rows);
         challenger.observe_algebra_slice(&proof.w);
-        challenger.observe_algebra_slice(&proof.w_prox);
         let indices = self.sample_queries(challenger);
 
         if proof.openings.len() != indices.len() {
@@ -263,7 +252,6 @@ where
             });
         }
         assert_eq!(proof.w.len(), cols);
-        assert_eq!(proof.w_prox.len(), cols);
 
         let (b, a) = self.eq_weights(point);
 
@@ -272,9 +260,8 @@ where
             return Err(TensorPcsError::ClaimedValueMismatch);
         }
 
-        // Encode both combined rows once; symbol `c` is Encode(·)[c].
+        // Encode the combined row once; symbol `c` is Encode(w)[c].
         let enc_w = self.encode_row(&proof.w);
-        let enc_wprox = self.encode_row(&proof.w_prox);
 
         // The committed matrix M̂ᵀ has n rows (leaves), each of width `rows`.
         let dims = [Dimensions {
@@ -290,13 +277,9 @@ where
             // leaf = column `idx` of M̂ = the single opened row (length `rows`).
             let leaf = &opening.opened_values[0];
 
-            // Evaluation consistency: ⟨b, leaf⟩ == Encode(w)[idx].
+            // Consolidated consistency + proximity: ⟨b, leaf⟩ == Encode(w)[idx].
             if dot_base(&b, leaf) != enc_w[idx] {
                 return Err(TensorPcsError::EvalCheckFailed { query });
-            }
-            // Proximity / well-formedness: ⟨γ, leaf⟩ == Encode(w')[idx].
-            if dot_base(&gamma, leaf) != enc_wprox[idx] {
-                return Err(TensorPcsError::ProximityCheckFailed { query });
             }
         }
         Ok(())
@@ -330,10 +313,7 @@ where
 
         // Replay the post-commitment transcript exactly as the prover drove it in
         // `open` (the commitment itself was absorbed by the outer protocol).
-        let eta: EF = challenger.sample_algebra_element();
-        let gamma = powers(eta, rows);
         challenger.observe_algebra_slice(&proof.w);
-        challenger.observe_algebra_slice(&proof.w_prox);
         let indices = self.sample_queries(challenger);
 
         if proof.openings.len() != indices.len() {
@@ -343,13 +323,11 @@ where
             });
         }
         assert_eq!(proof.w.len(), cols);
-        assert_eq!(proof.w_prox.len(), cols);
 
         let (b, a) = self.eq_weights(point);
 
-        // Encode both combined rows once; symbol `c` is Encode(·)[c].
+        // Encode the combined row once; symbol `c` is Encode(w)[c].
         let enc_w = self.encode_row(&proof.w);
-        let enc_wprox = self.encode_row(&proof.w_prox);
 
         let dims = [Dimensions {
             width: rows,
@@ -363,11 +341,9 @@ where
 
             let leaf = &opening.opened_values[0];
 
+            // Consolidated consistency + proximity: ⟨b, leaf⟩ == Encode(w)[idx].
             if dot_base(&b, leaf) != enc_w[idx] {
                 return Err(TensorPcsError::EvalCheckFailed { query });
-            }
-            if dot_base(&gamma, leaf) != enc_wprox[idx] {
-                return Err(TensorPcsError::ProximityCheckFailed { query });
             }
         }
 
@@ -418,17 +394,6 @@ where
         }
         out
     }
-}
-
-/// `(1, η, η², …, η^{len-1})`.
-fn powers<EF: Field>(eta: EF, len: usize) -> Vec<EF> {
-    let mut out = Vec::with_capacity(len);
-    let mut cur = EF::ONE;
-    for _ in 0..len {
-        out.push(cur);
-        cur *= eta;
-    }
-    out
 }
 
 /// The equality-weight table `eq(x, z)` for all `x ∈ {0,1}^{|z|}`, big-endian
