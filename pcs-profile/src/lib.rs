@@ -20,6 +20,7 @@ use p3_symmetric::{PaddingFreeSponge, SplitFieldHasher, TruncatedPermutation};
 
 pub mod basefold;
 pub mod brakedown;
+pub mod quasar;
 
 // ---- BabyBear hash stack (role-counted), shared by every PCS ----
 

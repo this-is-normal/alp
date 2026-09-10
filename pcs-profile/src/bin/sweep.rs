@@ -1,7 +1,7 @@
 //! Sweep PCS-only cost (BabyBear hash) over num_vars for Basefold and the three real Brakedown
 //! presets (small-proof / balanced / fast-prover), each with a distance-derived query count.
 //!
-//! Usage: `sweep [basefold|brakedown|both] [num_vars_csv] [prov|conj|both]`
+//! Usage: `sweep [basefold|brakedown|quasar|both|all] [num_vars_csv] [prov|conj|both]`
 //!   e.g. `cargo run -p pcs-profile --release --bin sweep -- both 8,10,12,14,16 both`
 //!
 //! Two cost centers per row: HASH perms (leaf/compress/sponge) and ARITH (mul/sq/inv/add), + proof
@@ -13,6 +13,7 @@
 use p3_brakedown::params;
 use pcs_profile::basefold::BasefoldProfile;
 use pcs_profile::brakedown::BrakedownProfile;
+use pcs_profile::quasar::QuasarProfile;
 use pcs_profile::{PcsMetrics, ProfileablePcs};
 
 fn main() {
@@ -41,15 +42,40 @@ fn main() {
          Brakedown presets: real t=⌈λ/−log₂(1−e)⌉, reg d/3=provable e=δ/3, d/2=conjectured e=δ/2."
     );
     println!("# (Brakedown q clamps to codeword for small num_vars — real counts show at num_vars ≳ 22.)");
+    println!(
+        "# Quasar: q = committed columns from the QA distance bound (reg d/3), \
+         plus 288 BaseFold reps for the code-switching openings."
+    );
     println!("{}", PcsMetrics::header());
+    let quasars: Vec<QuasarProfile> = if which == "quasar" || which == "all" {
+        // Both rates, at the paper's own benchmark shape (N1 = 2^6).
+        vec![
+            QuasarProfile::default(),
+            QuasarProfile {
+                index: 4,
+                ..QuasarProfile::default()
+            },
+        ]
+    } else {
+        Vec::new()
+    };
+
     for &nv in &nvs {
-        if which == "basefold" || which == "both" {
+        if which == "basefold" || which == "both" || which == "all" {
             println!("{}", bf.run(nv, 288, 1).row());
         }
-        if which == "brakedown" || which == "both" {
+        if which == "brakedown" || which == "both" || which == "all" {
             for bd in &bds {
                 println!("{}", bd.run(nv, 0, 1).row());
             }
+        }
+        for qz in &quasars {
+            // Skip shapes with fewer than two columns.
+            if nv <= qz.log_rows {
+                continue;
+            }
+            let q = qz.security_queries(nv).expect("ed25519 admits a QA distance");
+            println!("{}", qz.run(nv, q, 1).row());
         }
     }
 }

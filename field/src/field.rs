@@ -1159,6 +1159,26 @@ pub trait PrimeField:
     /// which lies in the range `0 <= x < self.order()`.
     #[must_use]
     fn as_canonical_biguint(&self) -> BigUint;
+
+    /// Write the canonical value as little-endian 64-bit words into `out`,
+    /// returning how many words were written.
+    ///
+    /// An allocation-free alternative to [`Self::as_canonical_biguint`] for hot
+    /// paths — limb decomposition for cross-field hashing above all, which runs
+    /// once per hashed element. The default goes through `BigUint` and so still
+    /// allocates; fields with a word-array representation should override it.
+    ///
+    /// # Panics
+    ///
+    /// If `out` is too short for the canonical value.
+    fn canonical_u64_words(&self, out: &mut [u64]) -> usize {
+        let mut written = 0;
+        for (i, digit) in self.as_canonical_biguint().iter_u64_digits().enumerate() {
+            out[i] = digit;
+            written = i + 1;
+        }
+        written
+    }
 }
 
 /// A prime field `ℤ/p` with order, `p < 2^64`.

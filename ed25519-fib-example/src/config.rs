@@ -126,8 +126,13 @@ pub fn config_for_brakedown(log_height: usize, width: usize) -> MultiFibConfigBr
     // Real recursive Brakedown code over the (power-of-two) message length `cols`.
     let mut code_rng = SmallRng::seed_from_u64(BRAKEDOWN_CODE_SEED);
     let code = BrakedownCode::from_message_len(cols, &mut code_rng);
-    // Brakedown's codeword length is not a power of two; clamp the query count to it.
-    let num_queries = core::cmp::min(32, code.codeword_len());
+    // Distance-derived query count (provable δ/3 radius), clamped to the codeword
+    // length — the same rule `eddsa-example`'s Brakedown backend uses. A fixed
+    // demo count here would make any cross-PCS comparison meaningless.
+    let num_queries = core::cmp::min(
+        p3_brakedown::params::small_proof().num_queries(100, false),
+        code.codeword_len(),
+    );
     let tensor = TensorPcs::new(code, mmcs, log_rows, num_queries);
     MultiFibConfigBrakedown {
         pcs: BrakedownPcs::new(tensor),
@@ -137,5 +142,101 @@ pub fn config_for_brakedown(log_height: usize, width: usize) -> MultiFibConfigBr
 /// The Brakedown PCS injects no domain separator, so a bare seeded challenger
 /// suffices — identical on the prove and verify sides.
 pub fn challenger_brakedown() -> MyChallenger {
+    MyChallenger::new(perm())
+}
+// ---- Quasar PCS wiring (spike) ----
+
+use p3_basefold::{BasefoldPcs, RandomFoldableCode};
+use p3_qa_code::QaCode;
+use p3_quasar::{QuasarMlPcs, QuasarParams, QuasarPcs};
+use rand_chacha::ChaCha8Rng;
+
+/// The Quasar-backed multilinear PCS used by multi-stark.
+pub type QuasarMl = QuasarMlPcs<F, MyMmcs, L>;
+
+/// Fixed seeds so prover and verifier build identical public parameters.
+const QA_CODE_SEED: u64 = 0x0A_C0DE;
+const BF_CODE_SEED: u64 = 0xBA5E_F01D;
+/// BaseFold inverse rate / query repetitions for the code-switching openings.
+const BF_INV_RATE: usize = 4;
+const BF_QUERIES: usize = 288;
+
+/// A Quasar-PCS-backed multilinear AIR configuration over ed25519.
+pub struct MultiFibConfigQuasar {
+    pcs: QuasarMl,
+}
+
+impl MultiStarkConfig for MultiFibConfigQuasar {
+    type Val = F;
+    type Challenge = EF;
+    type Challenger = MyChallenger;
+    type Pcs = QuasarMl;
+
+    fn pcs(&self) -> &QuasarMl {
+        &self.pcs
+    }
+
+    fn min_num_variables(&self) -> usize {
+        BRAKEDOWN_FOLDING
+    }
+
+    fn build_witness(&self, tables: Vec<Table<F>>) -> Witness<F> {
+        L::new_witness(tables, BRAKEDOWN_FOLDING)
+    }
+
+    fn committed_table<'a>(
+        &self,
+        prover_data: &'a p3_quasar::QuasarMlProverData<F, MyMmcs, L>,
+        table_index: usize,
+    ) -> &'a Table<F> {
+        prover_data.table(table_index)
+    }
+}
+
+/// Build a Quasar configuration sized for a single trace of `2^log_height` rows
+/// and `width` columns.
+pub fn config_for_quasar(log_height: usize, width: usize) -> MultiFibConfigQuasar {
+    let stacked = log_height + log2_ceil_usize(width);
+    let index = 2;
+    // The shape that minimises predicted proof size, when one reaching the
+    // target exists; otherwise the widest matrix that still leaves a column
+    // variable (a demo-sized instance, honestly under-secured — see the
+    // `achieved` figure logged below).
+    let chosen = QuasarParams::choose(stacked, index, 255, 103, 103, BF_INV_RATE, BF_QUERIES)
+        .or_else(|| {
+            QuasarParams::choose_best_effort(stacked, index, 255, 103, 103, BF_INV_RATE, BF_QUERIES)
+        })
+        .expect("ed25519 admits a QA distance bound");
+    let (log_rows, log_cols) = (chosen.log_rows, chosen.log_cols);
+
+    let code = QaCode::<F>::new_random(log_cols, index, &mut ChaCha8Rng::seed_from_u64(QA_CODE_SEED));
+    let basefold = BasefoldPcs::new(
+        RandomFoldableCode::<F>::new(log_cols, BF_INV_RATE, BF_CODE_SEED),
+        MyMmcs::new(MyHash::new(perm()), MyCompress::new(perm()), 0),
+        core::cmp::min(BF_QUERIES, BF_INV_RATE << log_cols),
+    );
+    let params = QuasarParams::new(
+        log_rows,
+        log_cols,
+        index,
+        chosen.num_queries.min(chosen.codeword_len()),
+    );
+
+    tracing::info!(
+        "quasar c={index} N1=2^{log_rows} N2=2^{log_cols}: {} of {} columns queried, \
+         {:.1}-bit sampling soundness",
+        params.num_queries,
+        params.codeword_len(),
+        params.achieved_security_bits(255, 103).unwrap_or(0.0),
+    );
+    let mmcs = MyMmcs::new(MyHash::new(perm()), MyCompress::new(perm()), 0);
+    let (pcs, key) = QuasarPcs::new(params, code, mmcs, basefold);
+    MultiFibConfigQuasar {
+        pcs: QuasarMl::new(pcs, key),
+    }
+}
+
+/// Same bare seeded challenger as the Brakedown path.
+pub fn challenger_quasar() -> MyChallenger {
     MyChallenger::new(perm())
 }

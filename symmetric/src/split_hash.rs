@@ -15,14 +15,19 @@
 //! (opened leaves stay `SF`, so no reconstruction is needed on the arithmetic
 //! side) while making every permutation ~100x cheaper.
 
+use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use p3_field::{
     PrimeField, PrimeField32, inject_field_order_num_limbs, injective_pack_bits,
-    split_pf_to_packed_limbs,
+    split_pf_to_packed_limbs_into,
 };
 
 use crate::CryptographicHasher;
+
+/// Largest limb count the stack buffer supports. A 512-bit `SF` split into
+/// ~31-bit `TF` limbs needs 17; 32 leaves headroom.
+const MAX_LIMBS: usize = 32;
 
 /// A [`CryptographicHasher`] mapping big-field `SF` items into a small-field `TF`
 /// digest by base-`|TF|` limb decomposition + an inner `TF`-native hasher `H`.
@@ -57,14 +62,23 @@ where
         I: IntoIterator<Item = SF>,
     {
         let n = self.num_limbs;
+        assert!(n <= MAX_LIMBS, "limb count exceeds the split buffer");
         // Radix-2^b bit-shift decomposition (b = injective_pack_bits::<TF>()) — avoids the
         // BigUint base-|TF| DIVISION that dominates the in-zkVM split cost. Still injective:
         // n limbs * b bits >= bits(SF), each limb < 2^b < |TF|.
         let b = injective_pack_bits::<TF>();
-        self.inner.hash_iter(
-            input
-                .into_iter()
-                .flat_map(|x| split_pf_to_packed_limbs::<SF, TF>(x, n, b)),
-        )
+        // One stack buffer, refilled per element, collected into a single `Vec`.
+        //
+        // A lazily-streaming iterator was tried instead and MEASURED SLOWER in
+        // the zkVM guest (per Merkle path 20,264 -> 20,789 instructions; bulk
+        // tree hashing +12%): the guest's bump allocator is nearly free, while
+        // the per-item state machine is not. Don't "fix" this back.
+        let mut limbs = [TF::ZERO; MAX_LIMBS];
+        let mut out = Vec::new();
+        for x in input {
+            split_pf_to_packed_limbs_into::<SF, TF>(x, b, &mut limbs[..n]);
+            out.extend_from_slice(&limbs[..n]);
+        }
+        self.inner.hash_iter(out)
     }
 }

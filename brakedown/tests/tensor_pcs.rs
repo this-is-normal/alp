@@ -125,7 +125,7 @@ fn tensor_pcs_rejects_tampered_column() {
     let (value, mut proof) = pcs.open(&prover_data, &point, &mut ch_p);
 
     // Mutation: corrupt one opened column value; its Merkle path no longer matches.
-    proof.openings[0].opened_values[0][0] += F::ONE;
+    proof.openings[0][0][0] += F::ONE;
 
     let mut ch_v = challenger();
     let err = pcs

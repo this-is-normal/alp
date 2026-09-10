@@ -48,6 +48,7 @@ pub mod grinding;
 pub mod ldt;
 
 pub mod fri;
+pub mod qa;
 pub mod whir;
 
 pub mod stark;
@@ -55,5 +56,6 @@ pub mod stark;
 pub use assumption::SecurityAssumption;
 pub use error::ErrorBits;
 pub use ldt::LowDegreeTest;
+pub use qa::QaRegime;
 pub use report::{Regime, RegimeReport, SecurityReport, SecurityTerm};
 pub use shape::{InstanceShape, StarkAirParams};

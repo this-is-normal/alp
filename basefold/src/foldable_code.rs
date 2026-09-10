@@ -27,10 +27,47 @@
 
 use alloc::vec::Vec;
 
-use p3_field::Field;
+use p3_field::{Field, batch_multiplicative_inverse};
+use p3_maybe_rayon::prelude::*;
 use rand::distr::{Distribution, StandardUniform};
 use rand::{RngExt, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+
+/// Recursion level below which `encode_level` stops forking: the subproblem is
+/// then small enough that task overhead outweighs the parallelism.
+const PAR_ENCODE_MIN_LEVEL: usize = 8;
+
+/// Odd stride (golden-ratio constant) decorrelating the per-element seeds.
+const SEED_STRIDE: u64 = 0x9E37_79B9_7F4A_7C15;
+
+/// Sample the nonzero code element at global index `idx`, **addressably**.
+///
+/// The construction used to draw every element from one sequential ChaCha
+/// stream, which meant a verifier could only reach `twist[level][j]` by
+/// replaying every earlier draw — i.e. by materialising the whole `O(N)` code
+/// to check `O(q·log N)` positions. Seeding a stream per element instead makes
+/// each position reachable on its own, which is what
+/// [`RandomFoldableCode::new_verifier`] needs. Rejection stays inside the
+/// element's own stream, so it does not disturb addressability.
+fn sample_nonzero_at<F: Field>(seed: u64, idx: usize) -> F
+where
+    StandardUniform: Distribution<F>,
+{
+    let mut rng =
+        ChaCha8Rng::seed_from_u64(seed.wrapping_add((idx as u64).wrapping_mul(SEED_STRIDE)));
+    loop {
+        let x: F = rng.random();
+        if !x.is_zero() {
+            return x;
+        }
+    }
+}
+
+/// Global index of `twist[level][0]`. `g0` occupies `0..inv_rate`, and level
+/// `i` the `inv_rate·2^{i−1}` slots starting at `inv_rate·2^{i−1}`.
+const fn level_base(inv_rate: usize, level: usize) -> usize {
+    inv_rate << (level - 1)
+}
 
 /// The interface a Basefold code must provide.
 pub trait FoldableCode<F: Field> {
@@ -43,8 +80,9 @@ pub trait FoldableCode<F: Field> {
     /// Fold a codeword of message-log-size `level` by one round with challenge `alpha`,
     /// halving its length. `level` must be in `1..=log_len`.
     fn fold(&self, codeword: &[F], level: usize, alpha: F) -> Vec<F>;
-    /// The twist vector `t_level` (the diagonal), needed by the verifier's fold-consistency check.
-    fn diag(&self, level: usize) -> &[F];
+    /// One entry of the twist vector `t_level`, the only twist access the
+    /// verifier's fold-consistency check needs.
+    fn diag_at(&self, level: usize, j: usize) -> F;
 }
 
 /// A rate-`1/inv_rate` foldable random linear code over `F`, built deterministically from a seed
@@ -53,13 +91,25 @@ pub trait FoldableCode<F: Field> {
 pub struct RandomFoldableCode<F> {
     log_len: usize,
     inv_rate: usize,
+    /// The seed every element is derived from, kept so a lazy instance can
+    /// reach any position without storing it.
+    seed: u64,
     /// Base `[inv_rate, 1]` generator; all entries nonzero.
     g0: Vec<F>,
     /// `twist[i]` (for `i in 1..=log_len`) has length `inv_rate · 2^{i-1}`; all entries nonzero.
     /// `twist[0]` is unused (kept for 1-based indexing).
-    twist: Vec<Vec<F>>,
-    /// Elementwise inverses of `twist`.
-    tinv: Vec<Vec<F>>,
+    /// `None` on a lazy verifier instance — see [`Self::new_verifier`].
+    twist: Option<Vec<Vec<F>>>,
+    /// Elementwise inverses of `twist`, likewise absent when lazy.
+    tinv: Option<Vec<Vec<F>>>,
+    /// Lazy sampler, present exactly when `twist` is absent.
+    ///
+    /// A plain function pointer rather than a `StandardUniform: Distribution<F>`
+    /// bound on the struct: the bound would have to be repeated on every impl
+    /// that touches a code, and from there on `BasefoldPcs`, `QuasarPcs` and
+    /// each `MultilinearPcs` impl above them. The constructor already carries
+    /// the bound, so it can hand the sampler over as data.
+    sample: Option<fn(u64, usize) -> F>,
     /// `1/2` in `F`.
     inv2: F,
 }
@@ -68,20 +118,12 @@ impl<F: Field> RandomFoldableCode<F>
 where
     StandardUniform: Distribution<F>,
 {
-    /// Build the code for `2^log_len`-element messages at rate `1/inv_rate`, seeded by `seed`.
+    /// Build the full code for `2^log_len`-element messages at rate `1/inv_rate`,
+    /// seeded by `seed`. This is the **prover's** constructor: it materialises
+    /// every twist. See [`Self::new_verifier`] for the other side.
     pub fn new(log_len: usize, inv_rate: usize, seed: u64) -> Self {
         assert!(inv_rate >= 2, "inverse rate must be >= 2");
-        let mut rng = ChaCha8Rng::seed_from_u64(seed);
-        let sample_nonzero = |rng: &mut ChaCha8Rng| -> F {
-            loop {
-                let x: F = rng.random();
-                if !x.is_zero() {
-                    return x;
-                }
-            }
-        };
-
-        let g0: Vec<F> = (0..inv_rate).map(|_| sample_nonzero(&mut rng)).collect();
+        let g0: Vec<F> = (0..inv_rate).map(|i| sample_nonzero_at(seed, i)).collect();
 
         let mut twist = Vec::with_capacity(log_len + 1);
         let mut tinv = Vec::with_capacity(log_len + 1);
@@ -89,18 +131,88 @@ where
         tinv.push(Vec::new());
         for i in 1..=log_len {
             let n_prev = inv_rate << (i - 1); // c · 2^{i-1}
-            let t: Vec<F> = (0..n_prev).map(|_| sample_nonzero(&mut rng)).collect();
-            let ti: Vec<F> = t.iter().map(|x| x.try_inverse().expect("nonzero")).collect();
+            // Addressable sampling, so every draw is independent and the level
+            // can be filled in parallel.
+            let base = level_base(inv_rate, i);
+            let t: Vec<F> = (0..n_prev)
+                .into_par_iter()
+                .map(|j| sample_nonzero_at(seed, base + j))
+                .collect();
+            // Montgomery's trick: ONE inversion plus ~3n multiplications for the
+            // whole level, instead of n independent inversions. Over ed25519 an
+            // inversion is a^(p-2) — 252 squarings and 77 multiplications — so
+            // inverting `c·2^log_len` twists one at a time dominated setup
+            // entirely (355 s at log_len = 19; this makes it ~1 s).
+            tinv.push(batch_multiplicative_inverse(&t));
             twist.push(t);
-            tinv.push(ti);
         }
 
         let inv2 = F::TWO.try_inverse().expect("2 is invertible in an odd field");
-        Self { log_len, inv_rate, g0, twist, tinv, inv2 }
+        Self { log_len, inv_rate, seed, g0, twist: Some(twist), tinv: Some(tinv), sample: None, inv2 }
     }
+
+    /// The **verifier's** constructor: the same code, holding only the seed and
+    /// the base generator.
+    ///
+    /// A Basefold verifier reads the twists at `O(q·log N)` queried positions,
+    /// but building them all is `O(N)` — sampling `inv_rate·(2^log_len − 1)`
+    /// field elements. On a host that sets up once this is amortised away; in a
+    /// recursion circuit, which sets up per proof, it *is* the cost, and it
+    /// grows linearly while the verifier proper grows logarithmically.
+    ///
+    /// [`Self::diag_at`] then derives one twist on demand from
+    /// [`sample_nonzero_at`], and `fold_pair` inverts that single element
+    /// rather than a whole level.
+    pub fn new_verifier(log_len: usize, inv_rate: usize, seed: u64) -> Self {
+        assert!(inv_rate >= 2, "inverse rate must be >= 2");
+        let g0: Vec<F> = (0..inv_rate).map(|i| sample_nonzero_at(seed, i)).collect();
+        let inv2 = F::TWO.try_inverse().expect("2 is invertible in an odd field");
+        Self {
+            log_len,
+            inv_rate,
+            seed,
+            g0,
+            twist: None,
+            tinv: None,
+            sample: Some(sample_nonzero_at::<F>),
+            inv2,
+        }
+    }
+
 }
 
 impl<F: Field> RandomFoldableCode<F> {
+    /// `1/t_level[j]`: an array read when the code is materialised, one
+    /// sample-and-invert when it is lazy.
+    fn tinv_at(&self, level: usize, j: usize) -> F {
+        match &self.tinv {
+            Some(tinv) => tinv[level][j],
+            None => self
+                .diag_at(level, j)
+                .try_inverse()
+                .expect("twists are sampled nonzero"),
+        }
+    }
+
+    /// The materialised twists. Encoding and whole-codeword folding are prover
+    /// operations; a lazy verifier instance has neither.
+    ///
+    /// # Panics
+    ///
+    /// If this instance came from [`Self::new_verifier`].
+    fn materialised_twist(&self) -> &[Vec<F>] {
+        self.twist
+            .as_deref()
+            .expect("this is a lazy (verifier-only) code: it cannot encode")
+    }
+
+    /// As [`Self::materialised_twist`], for the inverses.
+    fn materialised_tinv(&self) -> &[Vec<F>] {
+        self.tinv
+            .as_deref()
+            .expect("this is a lazy (verifier-only) code: it cannot fold a whole codeword")
+    }
+
     /// Encode a message of length `2^level` (`level in 0..=log_len`). Public for tests; the trait's
     /// `encode` calls this at the top level.
     pub fn encode_level(&self, level: usize, message: &[F]) -> Vec<F> {
@@ -109,20 +221,36 @@ impl<F: Field> RandomFoldableCode<F> {
             return self.g0.iter().map(|&g| message[0] * g).collect();
         }
         let half = message.len() / 2;
-        let l = self.encode_level(level - 1, &message[..half]);
-        let r = self.encode_level(level - 1, &message[half..]);
-        let t = &self.twist[level];
+        // The two halves are independent, so fork them until the subproblems
+        // are too small to be worth a task. This recursion IS the encode, and
+        // BaseFold commits a full-length codeword with it, so it dominates the
+        // commitment for the standalone scheme.
+        let (l, r) = if level >= PAR_ENCODE_MIN_LEVEL {
+            p3_maybe_rayon::prelude::join(
+                || self.encode_level(level - 1, &message[..half]),
+                || self.encode_level(level - 1, &message[half..]),
+            )
+        } else {
+            (
+                self.encode_level(level - 1, &message[..half]),
+                self.encode_level(level - 1, &message[half..]),
+            )
+        };
+        let t = &self.materialised_twist()[level];
         debug_assert_eq!(l.len(), t.len());
         let n_prev = l.len();
-        let mut out = Vec::with_capacity(2 * n_prev);
-        // top half: l + t·r
-        for j in 0..n_prev {
-            out.push(l[j] + t[j] * r[j]);
-        }
-        // bottom half: l − t·r
-        for j in 0..n_prev {
-            out.push(l[j] - t[j] * r[j]);
-        }
+
+        // out = [ l + t·r ; l − t·r ], both halves written in one parallel pass.
+        let mut out = F::zero_vec(2 * n_prev);
+        let (top, bottom) = out.split_at_mut(n_prev);
+        top.par_iter_mut()
+            .zip(bottom.par_iter_mut())
+            .zip(l.par_iter().zip(r.par_iter()).zip(t.par_iter()))
+            .for_each(|((hi, lo), ((&lj, &rj), &tj))| {
+                let tr = tj * rj;
+                *hi = lj + tr;
+                *lo = lj - tr;
+            });
         out
     }
 
@@ -130,7 +258,7 @@ impl<F: Field> RandomFoldableCode<F> {
     /// matching `fold(codeword, level, alpha)[j]`. Used by the verifier's per-query check.
     pub fn fold_pair(&self, a: F, b: F, level: usize, j: usize, alpha: F) -> F {
         let l = (a + b) * self.inv2;
-        let r = (a - b) * self.inv2 * self.tinv[level][j];
+        let r = (a - b) * self.inv2 * self.tinv_at(level, j);
         l + alpha * (r - l)
     }
 
@@ -167,18 +295,25 @@ impl<F: Field> FoldableCode<F> for RandomFoldableCode<F> {
         assert_eq!(codeword.len(), expected, "codeword length must be inv_rate·2^level");
         let n_prev = codeword.len() / 2;
         let (a, b) = codeword.split_at(n_prev);
-        let tinv = &self.tinv[level];
-        let mut out = Vec::with_capacity(n_prev);
-        for j in 0..n_prev {
-            let l = (a[j] + b[j]) * self.inv2;
-            let r = (a[j] - b[j]) * self.inv2 * tinv[j];
-            out.push(l + alpha * (r - l)); // MLE restrict: (1−α)·l + α·r
-        }
-        out
+        let tinv = &self.materialised_tinv()[level];
+        // Every output position is independent.
+        a.par_iter()
+            .zip(b.par_iter())
+            .zip(tinv.par_iter())
+            .map(|((&aj, &bj), &tij)| {
+                let l = (aj + bj) * self.inv2;
+                let r = (aj - bj) * self.inv2 * tij;
+                l + alpha * (r - l) // MLE restrict: (1−α)·l + α·r
+            })
+            .collect()
     }
 
-    fn diag(&self, level: usize) -> &[F] {
-        &self.twist[level]
+    fn diag_at(&self, level: usize, j: usize) -> F {
+        match (&self.twist, self.sample) {
+            (Some(twist), _) => twist[level][j],
+            (None, Some(sample)) => sample(self.seed, level_base(self.inv_rate, level) + j),
+            (None, None) => unreachable!("a code has either its twists or a sampler"),
+        }
     }
 }
 
@@ -244,5 +379,35 @@ mod tests {
         let lhs = code.encode(&comb);
         let rhs: Vec<F> = cx.iter().zip(&cy).map(|(&u, &v)| a * u + b * v).collect();
         assert_eq!(lhs, rhs, "encode must be F-linear");
+    }
+
+    /// The lazy verifier code is the *same* code: every twist it derives on
+    /// demand equals the materialised one, and so does every `fold_pair`.
+    #[test]
+    fn lazy_matches_full() {
+        let (log_len, inv_rate, seed) = (6, 4, 0xBA5E_F01D);
+        let full = RandomFoldableCode::<F>::new(log_len, inv_rate, seed);
+        let lazy = RandomFoldableCode::<F>::new_verifier(log_len, inv_rate, seed);
+
+        assert_eq!(full.g0, lazy.g0, "base generator");
+        assert_eq!(full.codeword_len(), lazy.codeword_len());
+
+        let mut rng = ChaCha8Rng::seed_from_u64(7);
+        for level in 1..=log_len {
+            for j in 0..(inv_rate << (level - 1)) {
+                assert_eq!(
+                    full.diag_at(level, j),
+                    lazy.diag_at(level, j),
+                    "twist mismatch at level {level} index {j}"
+                );
+            }
+            // The per-query check the verifier actually runs.
+            let (a, b, alpha) = (rng.random::<F>(), rng.random::<F>(), rng.random::<F>());
+            assert_eq!(
+                full.fold_pair(a, b, level, 0, alpha),
+                lazy.fold_pair(a, b, level, 0, alpha),
+                "fold_pair mismatch at level {level}"
+            );
+        }
     }
 }

@@ -6,45 +6,16 @@
 //! different column count than the main trace, giving it a different stacked
 //! arity, so it needs its own PCS instance sized for that arity.
 //!
-//! **Hash field (feature `bb-hash`).** By default the Merkle commitment and
-//! Fiat-Shamir transcript hash with a Poseidon2 permutation over **ed25519**
-//! (255-bit). With `--features bb-hash` the hash instead runs over **BabyBear**
-//! (31-bit): the committed data, linear code, and sumcheck stay over ed25519, and
-//! only the hash field changes — each ed25519 value is decomposed into
-//! base-`|BabyBear|` limbs for hashing (see [`SplitFieldHasher`]) and the
-//! challenger sponges over BabyBear while presenting an ed25519 interface (see
-//! [`DuplexChallengerCF`]). This makes every Poseidon2 permutation ~100x cheaper
-//! inside the 32-bit OpenVM verifier; the default ed25519 hash is kept for
-//! host-side comparison and op-count calibration.
+//! The field/hash/transcript stack lives in [`crate::hash`] and the commitment
+//! scheme in [`crate::backend`] — one module per PCS, selected by cargo feature
+//! (`ligero`, `basefold`, `quasar`, or none for Brakedown). Nothing in this file
+//! is backend-specific.
 
-#[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
-use p3_brakedown::BrakedownCode as RealBrakedownCode;
-#[cfg(all(feature = "ligero", not(feature = "basefold")))]
-use p3_brakedown::ReedSolomonCode;
-#[cfg(not(feature = "basefold"))]
-use p3_brakedown::{BrakedownMlPcs, LinearCode, TensorPcs};
-#[cfg(feature = "basefold")]
-use p3_basefold::{BasefoldMlPcs, BasefoldPcs, RandomFoldableCode};
-use p3_ed25519::Ed25519;
-use p3_merkle_tree::MerkleTreeMmcs;
 use p3_multi_stark::config::MultiStarkConfig;
-use p3_sumcheck::layout::{Layout, PrefixProver, Table, Witness};
-use p3_symmetric::{PaddingFreeSponge, TruncatedPermutation};
-use p3_util::log2_ceil_usize;
-// Needed for `seed_from_u64` on the ed25519 perm RNG (default) and the Brakedown code RNG
-// (non-basefold); the `bb-hash`+`basefold` combo seeds neither in this module.
-#[cfg(not(all(feature = "bb-hash", feature = "basefold")))]
-use rand::SeedableRng;
+use p3_sumcheck::layout::{Layout, Table, Witness};
 
-// ---- ed25519-hash-only imports (default) ----
-#[cfg(not(feature = "bb-hash"))]
-use p3_challenger::DuplexChallengerPF;
-#[cfg(not(feature = "bb-hash"))]
-use p3_ed25519::{
-    ED25519_POSEIDON2_FULL_ROUNDS, ED25519_POSEIDON2_PARTIAL_ROUNDS_3, Poseidon2Ed25519,
-};
-#[cfg(not(feature = "bb-hash"))]
-use rand::rngs::SmallRng;
+use crate::backend::{CodePcs, FOLDING, build_pcs};
+use crate::hash::{EF, L, MyChallenger};
 
 // ---- bb-hash-only imports ----
 #[cfg(feature = "bb-hash")]
@@ -388,6 +359,11 @@ fn build_pcs(log_height: usize, width: usize, security_bits: usize) -> CodePcs {
     let tensor = TensorPcs::new(code, mmcs, log_rows, num_queries);
     CodePcs::new(tensor)
 }
+pub use crate::hash::{EF as ChallengeField, F, MyChallenger as Challenger, challenger};
+// Only the ed25519-hash stack has hash muls to subtract; under `bb-hash` the
+// hash is BabyBear, so there is nothing to calibrate.
+#[cfg(all(feature = "count-ops", not(feature = "bb-hash")))]
+pub use crate::hash::muls_per_perm;
 
 /// A config for an AIR with a preprocessed trace: it carries two PCS instances,
 /// one per stacked arity (main trace vs preprocessed trace).
@@ -411,29 +387,28 @@ impl MultiStarkConfig for EdDsaConfig {
     }
 
     fn min_num_variables(&self) -> usize {
-        BRAKEDOWN_FOLDING
+        FOLDING
     }
 
     fn build_witness(&self, tables: Vec<Table<F>>) -> Witness<F> {
-        L::new_witness(tables, BRAKEDOWN_FOLDING)
+        L::new_witness(tables, FOLDING)
     }
 
-    #[cfg(not(feature = "basefold"))]
     fn committed_table<'a>(
         &self,
-        prover_data: &'a p3_brakedown::BrakedownProverData<F, EF, MyMmcs, L>,
+        prover_data: &'a p3_multi_stark::config::ProverData<Self>,
         table_index: usize,
     ) -> &'a Table<F> {
         prover_data.table(table_index)
     }
+}
 
-    #[cfg(feature = "basefold")]
-    fn committed_table<'a>(
-        &self,
-        prover_data: &'a p3_basefold::BasefoldMlProverData<F, MyMmcs, L>,
-        table_index: usize,
-    ) -> &'a Table<F> {
-        prover_data.table(table_index)
+impl EdDsaConfig {
+    /// Both PCS instances, main first. A recursion host needs them to read out
+    /// public setup material (Quasar's coefficient commitments, say) that the
+    /// guest would otherwise have to recompute.
+    pub const fn pcs_pair(&self) -> (&CodePcs, &CodePcs) {
+        (&self.main_pcs, &self.preprocessed_pcs)
     }
 }
 

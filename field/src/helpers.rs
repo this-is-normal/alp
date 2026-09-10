@@ -270,32 +270,65 @@ pub fn pf_packed_limbs_cover_order<SF: PrimeField>(num_limbs: usize, radix_bits:
 ///   `pf_packed_limbs_cover_order::<SF>(num_limbs, radix_bits)`. Deliberately truncated
 ///   splits (e.g. challengers that use `floor` limb counts for squeeze) omit high bits by design
 ///   and do not satisfy that coverage check.
-#[must_use]
-pub fn split_pf_to_packed_limbs<SF: PrimeField, TF: PrimeField32>(
+/// Widest field this module's limb extraction supports, in 64-bit words (512 bits).
+const MAX_CANONICAL_WORDS: usize = 8;
+
+/// [`split_pf_to_packed_limbs`] writing into a caller buffer, so a hot path can
+/// use a stack array instead of allocating a `Vec` per element.
+///
+/// `out.len()` is the limb count. Returns nothing; every slot is written.
+///
+/// # Panics
+///
+/// If `SF` is wider than 512 bits.
+pub fn split_pf_to_packed_limbs_into<SF: PrimeField, TF: PrimeField32>(
     val: SF,
-    num_limbs: usize,
     radix_bits: u32,
-) -> Vec<TF> {
+    out: &mut [TF],
+) {
+    #[cfg(feature = "count-ops")]
+    crate::split_counter::on_split();
+
     debug_assert!((0 < radix_bits) && (radix_bits < 64));
     debug_assert!(
         radix_bits <= injective_pack_bits::<TF>(),
         "radix_bits must be ≤ injective_pack_bits::<TF>() for injective limb embedding"
     );
 
-    // Use a primitive u32 mask!
-    let mask_u32: u32 = (1u32 << radix_bits) - 1;
-    let mut rem = val.as_canonical_biguint();
-    let mut out = vec![TF::ZERO; num_limbs];
+    // Copy the canonical value into a fixed stack buffer ONCE, then cut each
+    // limb out with plain shifts.
+    //
+    // The obvious loop — `rem.iter_u32_digits().next()` then `rem >>= radix_bits`
+    // — costs a full multi-word BigUint shift per limb. In a 32-bit zkVM guest
+    // that measured **1,583 instructions per element**, against 16 for a
+    // Poseidon2 permutation on the precompile: every hashed field element paid
+    // ~100x the hash it was being prepared for, and it was the single largest
+    // term in the recursion verifier. This version is pure register work after
+    // one canonicalisation.
+    let mut words = [0u64; MAX_CANONICAL_WORDS];
+    let num_words = val.canonical_u64_words(&mut words);
 
-    for item in out.iter_mut() {
-        // Look at the lowest limb directly, no allocations
-        let limb = rem.iter_u32_digits().next().unwrap_or(0) & mask_u32;
-        *item = TF::from_int(limb);
-
-        // In-place bitshift modifies the BigUint without allocating
-        rem >>= radix_bits;
+    let mask = (1u64 << radix_bits) - 1;
+    for (k, item) in out.iter_mut().enumerate() {
+        let bit = k * radix_bits as usize;
+        let (word, offset) = (bit / 64, bit % 64);
+        let mut chunk = if word < num_words { words[word] >> offset } else { 0 };
+        // A limb straddling a word boundary takes its high bits from the next word.
+        if offset != 0 && offset + radix_bits as usize > 64 && word + 1 < num_words {
+            chunk |= words[word + 1] << (64 - offset);
+        }
+        *item = TF::from_int((chunk & mask) as u32);
     }
+}
 
+#[must_use]
+pub fn split_pf_to_packed_limbs<SF: PrimeField, TF: PrimeField32>(
+    val: SF,
+    num_limbs: usize,
+    radix_bits: u32,
+) -> Vec<TF> {
+    let mut out = vec![TF::ZERO; num_limbs];
+    split_pf_to_packed_limbs_into::<SF, TF>(val, radix_bits, &mut out);
     out
 }
 

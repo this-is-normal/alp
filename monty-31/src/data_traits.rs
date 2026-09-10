@@ -21,6 +21,19 @@ pub trait MontyParameters:
     const MONTY_MU: u32;
 
     const MONTY_MASK: u32 = ((1u64 << Self::MONTY_BITS) - 1) as u32;
+
+    /// `R² mod P`, where `R = 2^MONTY_BITS`.
+    ///
+    /// Lets [`crate::to_monty`] enter Montgomery form with a Montgomery
+    /// *multiply* rather than a 64-bit modulo. On a 64-bit host the modulo is
+    /// one instruction and this is a wash; on a 32-bit target — an rv32im zkVM
+    /// guest, say — `u64 % u64` compiles to a software `__umoddi3` call, and
+    /// `to_monty` is on the hot path of every `u32 → field` conversion.
+    /// Computed here from `PRIME`, so no implementor has to supply it.
+    const MONTY_R2: u32 = {
+        let r = (1u64 << Self::MONTY_BITS) % Self::PRIME as u64;
+        ((r * r) % Self::PRIME as u64) as u32
+    };
 }
 
 /// PackedMontyParameters contains constants needed for MONTY operations for packings of Monty31 fields.

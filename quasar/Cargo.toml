@@ -1,0 +1,53 @@
+[package]
+name = "p3-quasar"
+description = "Quasar: a field-agnostic multilinear PCS combining a quasi-abelian code commitment with BaseFold through a QA-tailored code-switching argument (eprint 2026/1839)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-basefold.workspace = true
+# For the `LinearCode` trait the QA encoder implements.
+p3-brakedown.workspace = true
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-multilinear-util.workspace = true
+p3-qa-code.workspace = true
+p3-security.workspace = true
+p3-sumcheck.workspace = true
+p3-util.workspace = true
+tracing.workspace = true
+
+serde = { workspace = true, features = ["derive", "alloc"] }
+p3-maybe-rayon.workspace = true
+
+[features]
+parallel = [
+    "p3-maybe-rayon/parallel",
+    "p3-qa-code/parallel",
+    "p3-brakedown/parallel",
+    "p3-basefold/parallel",
+    "p3-sumcheck/parallel",
+    "p3-multilinear-util/parallel",
+]
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-ed25519 = { path = "../ed25519" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-symmetric = { path = "../symmetric" }
+p3-commit = { path = "../commit" }
+
+criterion.workspace = true
+rand.workspace = true
+rand_chacha = { version = "0.10", default-features = false }
+
+[[bench]]
+name = "quasar_pcs"
+harness = false
+
+[lints]
+workspace = true

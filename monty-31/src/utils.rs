@@ -5,7 +5,13 @@ use crate::{FieldParameters, MontyParameters};
 /// The output will be a u32 in range `[0, P)`.
 #[inline]
 pub(crate) const fn to_monty<MP: MontyParameters>(x: u32) -> u32 {
-    (((x as u64) << MP::MONTY_BITS) % MP::PRIME as u64) as u32
+    // MontMul(x, R²) = x·R²·R⁻¹ = x·R (mod P), i.e. exactly `x` in Montgomery
+    // form — using only 32×32→64 multiplies, which every target has, instead of
+    // `u64 % u64`, which a 32-bit target does not. See [`MontyParameters::MONTY_R2`].
+    //
+    // Range: `x < 2^32` and `R² mod P < P < 2^31`, so the product is below
+    // `2^63 < R·P`, which is what `monty_reduce` requires.
+    monty_reduce::<MP>((x as u64) * (MP::MONTY_R2 as u64))
 }
 
 /// Convert an i32 into MONTY form.

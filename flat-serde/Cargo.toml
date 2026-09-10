@@ -1,0 +1,17 @@
+[package]
+name = "p3-flat-serde"
+description = "A flat, fixed-width serde format: no varints, no self-description, borrowed bytes. For proof blobs a zkVM guest must parse."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true, features = ["derive", "alloc"] }
+
+[dev-dependencies]
+p3-ed25519 = { path = "../ed25519" }
+p3-field = { path = "../field" }
+
+[lints]
+workspace = true

@@ -8,6 +8,9 @@ publish = false
 
 [dependencies]
 p3-field.workspace = true
+# The rayon/serial shim. Serial (no_std) by default; `parallel` flips it — and,
+# via Cargo feature unification, the shared instance every other p3 crate sees.
+p3-maybe-rayon.workspace = true
 p3-util.workspace = true
 p3-challenger.workspace = true
 p3-commit.workspace = true
@@ -19,6 +22,11 @@ rand = { workspace = true }
 rand_chacha = { version = "0.10", default-features = false }
 serde = { workspace = true, features = ["derive", "alloc"] }
 tracing.workspace = true
+
+[features]
+# Rayon parallelism across the foldable-code encode, the fold rounds, and the
+# per-round sumcheck reductions — BaseFold's whole prover.
+parallel = ["p3-maybe-rayon/parallel"]
 
 [dev-dependencies]
 p3-ed25519 = { path = "../ed25519" }

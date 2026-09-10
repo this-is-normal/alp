@@ -54,7 +54,7 @@ use alloc::vec::Vec;
 use core::marker::PhantomData;
 
 use p3_challenger::{CanObserve, CanSampleBits, FieldChallenger};
-use p3_commit::{BatchOpening, BatchOpeningRef, Mmcs};
+use p3_commit::Mmcs;
 use p3_field::{ExtensionField, Field};
 use p3_matrix::Dimensions;
 use p3_matrix::dense::RowMajorMatrix;
@@ -111,8 +111,12 @@ pub struct TensorProof<Val: Send + Sync + Clone, EF, M: Mmcs<Val>> {
     /// (the eq-weights of the point's row variables) is a Diamond–Posen tensor combination that
     /// serves as BOTH the evaluation and the proximity check — no separate proximity row is needed.
     pub w: Vec<EF>,
-    /// One Merkle opening per queried column (in transcript order).
-    pub openings: Vec<BatchOpening<Val, M>>,
+    /// The `t` queried columns of `M̂`: `openings[k][0]` is column `indices[k]`,
+    /// all under ONE pruned authentication path. The queries share most of their
+    /// ancestors, so the shared siblings are recomputable and need not be sent.
+    pub openings: Vec<Vec<Vec<Val>>>,
+    /// The pruned paths covering every queried column.
+    pub opening_proof: M::MultiProof,
 }
 
 /// Verification failures.
@@ -216,12 +220,11 @@ where
 
         // Sample query columns and open them.
         let indices = self.sample_queries(challenger);
-        let openings = indices
-            .iter()
-            .map(|&idx| self.mmcs.open_batch(idx, &prover_data.mmcs_data))
-            .collect();
+        let (openings, opening_proof) = self
+            .mmcs
+            .open_multi_batch(&indices, &prover_data.mmcs_data);
 
-        (value, TensorProof { w, openings })
+        (value, TensorProof { w, openings, opening_proof })
     }
 
     /// Verify an opening proof for `point`, checking the claimed `value`.
@@ -269,16 +272,21 @@ where
             height: n,
         }];
 
+        if proof.openings.iter().any(|v| v.len() != 1 || v[0].len() != rows) {
+            return Err(TensorPcsError::WrongOpeningCount {
+                expected: indices.len(),
+                got: proof.openings.len(),
+            });
+        }
+        // One pruned multi-opening covers every queried column.
+        self.mmcs
+            .verify_multi_batch(commitment, &dims, &indices, &proof.openings, &proof.opening_proof)
+            .map_err(TensorPcsError::Merkle)?;
+
         for (query, (&idx, opening)) in indices.iter().zip(&proof.openings).enumerate() {
-            self.mmcs
-                .verify_batch(commitment, &dims, idx, BatchOpeningRef::from(opening))
-                .map_err(TensorPcsError::Merkle)?;
-
-            // leaf = column `idx` of M̂ = the single opened row (length `rows`).
-            let leaf = &opening.opened_values[0];
-
-            // Consolidated consistency + proximity: ⟨b, leaf⟩ == Encode(w)[idx].
-            if dot_base(&b, leaf) != enc_w[idx] {
+            // leaf = column `idx` of M̂: consolidated consistency + proximity,
+            // ⟨b, leaf⟩ == Encode(w)[idx].
+            if dot_base(&b, &opening[0]) != enc_w[idx] {
                 return Err(TensorPcsError::EvalCheckFailed { query });
             }
         }
@@ -334,15 +342,21 @@ where
             height: n,
         }];
 
+        if proof.openings.iter().any(|v| v.len() != 1 || v[0].len() != rows) {
+            return Err(TensorPcsError::WrongOpeningCount {
+                expected: indices.len(),
+                got: proof.openings.len(),
+            });
+        }
+        // One pruned multi-opening covers every queried column.
+        self.mmcs
+            .verify_multi_batch(commitment, &dims, &indices, &proof.openings, &proof.opening_proof)
+            .map_err(TensorPcsError::Merkle)?;
+
         for (query, (&idx, opening)) in indices.iter().zip(&proof.openings).enumerate() {
-            self.mmcs
-                .verify_batch(commitment, &dims, idx, BatchOpeningRef::from(opening))
-                .map_err(TensorPcsError::Merkle)?;
-
-            let leaf = &opening.opened_values[0];
-
-            // Consolidated consistency + proximity: ⟨b, leaf⟩ == Encode(w)[idx].
-            if dot_base(&b, leaf) != enc_w[idx] {
+            // leaf = column `idx` of M̂: consolidated consistency + proximity,
+            // ⟨b, leaf⟩ == Encode(w)[idx].
+            if dot_base(&b, &opening[0]) != enc_w[idx] {
                 return Err(TensorPcsError::EvalCheckFailed { query });
             }
         }

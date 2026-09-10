@@ -11,12 +11,15 @@
 
 extern crate alloc;
 
+mod grinding;
+
 mod foldable_code;
 mod merkle_pcs;
 mod pcs;
 mod prescribed_pcs;
 
 pub use foldable_code::{FoldableCode, RandomFoldableCode};
-pub use merkle_pcs::{BasefoldPcs, BasefoldProof, BasefoldProverData};
+pub use grinding::grind_parallel;
+pub use merkle_pcs::{BasefoldBatchProverData, BasefoldPcs, BasefoldProof, BasefoldProverData};
 pub use pcs::{BasefoldCore, BasefoldCoreProof, eval_multilinear};
 pub use prescribed_pcs::{BasefoldMlError, BasefoldMlPcs, BasefoldMlProof, BasefoldMlProverData};

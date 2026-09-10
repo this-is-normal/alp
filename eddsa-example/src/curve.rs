@@ -117,3 +117,20 @@ pub fn valid_instance(num_bits: usize, a_sec: u64, r_sec: u64, k: u64) -> Instan
 
     Instance { a, r, s_bits, k_bits }
 }
+
+/// `num_signatures` genuine, *distinct* verifying instances, for the batched
+/// proofs `EdDsaAir`'s `log_instances` stacks into one table.
+///
+/// The secrets vary per instance so the stacked trace is not `n` copies of one
+/// witness. They stay small (the demo constraint `s = r + k·a < l` bounds them),
+/// which costs nothing: the circuit is full `num_bits` rows regardless of scalar
+/// magnitude.
+#[must_use]
+pub fn valid_instances(num_bits: usize, num_signatures: usize) -> Vec<Instance> {
+    (0..num_signatures)
+        .map(|i| {
+            let i = i as u64;
+            valid_instance(num_bits, 3 + i, 5 + 2 * i, 7 + i)
+        })
+        .collect()
+}

@@ -20,6 +20,10 @@ rand.workspace = true
 serde = { workspace = true, features = ["derive"] }
 tracing.workspace = true
 
+[features]
+# Instrumentation only: count cross-field limb splits (see `split_counter`).
+count-ops = []
+
 [dev-dependencies]
 p3-baby-bear = { path = "../baby-bear" }
 p3-goldilocks = { path = "../goldilocks" }

@@ -7,11 +7,13 @@ mod baby_bear;
 #[cfg(test)]
 mod extension_test;
 mod mds;
+mod monty_bypass;
 mod poseidon1;
 mod poseidon2;
 
 pub use baby_bear::*;
 pub use mds::*;
+pub use monty_bypass::*;
 pub use poseidon1::*;
 pub use poseidon2::*;
 

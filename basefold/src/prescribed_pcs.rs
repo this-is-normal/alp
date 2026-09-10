@@ -91,7 +91,10 @@ where
         + GrindingChallenger<Witness = Val>
         + CanSampleUniformBits<Val>
         + CanSampleBits<usize>
-        + CanObserve<M::Commitment>,
+        + CanObserve<M::Commitment>
+        + Clone
+        + Send
+        + Sync,
 {
     type Val = Val;
     type Commitment = M::Commitment;
@@ -130,7 +133,10 @@ where
         + GrindingChallenger<Witness = Val>
         + CanSampleUniformBits<Val>
         + CanSampleBits<usize>
-        + CanObserve<M::Commitment>,
+        + CanObserve<M::Commitment>
+        + Clone
+        + Send
+        + Sync,
 {
     fn open_at(
         &self,

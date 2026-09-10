@@ -11,6 +11,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use p3_field::Field;
+use p3_maybe_rayon::prelude::*;
 
 use crate::foldable_code::{FoldableCode, RandomFoldableCode};
 
@@ -46,23 +47,32 @@ pub fn eval_multilinear<F: Field>(evals: &[F], z: &[F]) -> F {
 
 /// `eq_table(z)[x] = Π_k (x_bit_k ? z[k] : 1−z[k])`, MSB-first indexing (variable `k` at bit `d-1-k`).
 pub(crate) fn eq_table<F: Field>(z: &[F]) -> Vec<F> {
-    let d = z.len();
-    let mut e = vec![F::ZERO; 1 << d];
-    for (x, slot) in e.iter_mut().enumerate() {
-        let mut p = F::ONE;
-        for (k, &zk) in z.iter().enumerate() {
-            let bit = (x >> (d - 1 - k)) & 1;
-            p *= if bit == 1 { zk } else { F::ONE - zk };
-        }
-        *slot = p;
+    // Build by doubling, MSB-first: each variable in turn becomes the new
+    // *least* significant bit, so entries for a variable land adjacent
+    // (`next[2i]`, `next[2i+1]`) rather than half a table apart. Getting this
+    // backwards silently reverses the variable order.
+    let mut table = vec![F::ONE];
+    for &zk in z {
+        let mut next = F::zero_vec(2 * table.len());
+        next.par_chunks_exact_mut(2)
+            .zip(table.par_iter())
+            .for_each(|(pair, &t)| {
+                pair[0] = t * (F::ONE - zk);
+                pair[1] = t * zk;
+            });
+        table = next;
     }
-    e
+    table
 }
 
 /// MLE-restrict the top (MSB) variable to `r`: `[f_L ‖ f_R] -> (1−r)·f_L + r·f_R`.
 pub(crate) fn bind_msb<F: Field>(f: &[F], r: F) -> Vec<F> {
     let half = f.len() / 2;
-    (0..half).map(|x| f[x] + r * (f[half + x] - f[x])).collect()
+    let (lo, hi) = f.split_at(half);
+    lo.par_iter()
+        .zip(hi.par_iter())
+        .map(|(&a, &b)| a + r * (b - a))
+        .collect()
 }
 
 /// Evaluate a degree-2 univariate given by its values at 0,1,2, at point `r` (Lagrange).

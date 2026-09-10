@@ -151,6 +151,17 @@ where
         )
         .map_err(VerificationError::Zerocheck)?;
 
+    // COST ABLATION ONLY — never enable in a real verifier. Returns success
+    // after the zerocheck, i.e. after the pure-arithmetic half and before any
+    // Merkle work, so a recursion guest's instruction count can be split into
+    // "arithmetic the prover could have proved natively" and "hashing that has
+    // to happen where the transcript is checked".
+    #[cfg(feature = "ablate-zerocheck-only")]
+    {
+        let _ = &reduction;
+        return Ok(());
+    }
+
     // 4. Open the committed main trace tables at their suffixes of the bound
     // point. The returned values are bound to the main commitment.
     let main_evals = config

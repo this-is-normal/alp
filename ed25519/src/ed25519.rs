@@ -533,6 +533,20 @@ impl QuotientMap<i128> for Ed25519 {
 
 impl PrimeField for Ed25519 {
     #[inline]
+    fn canonical_u64_words(&self, out: &mut [u64]) -> usize {
+        // ed25519 is a fixed 4-word field, so the canonical value is already a
+        // `[u64; 4]` — no `BigUint`, and in particular none of the byte-vector
+        // round trip `to_biguint` does. This runs once per hashed element in the
+        // cross-field Merkle/transcript path, which is the hottest loop in the
+        // OpenVM recursion verifier.
+        #[cfg(not(target_os = "zkvm"))]
+        let value = monty_mul(self.value, [1, 0, 0, 0]);
+        #[cfg(target_os = "zkvm")]
+        let value = self.value;
+        out[..4].copy_from_slice(&value);
+        4
+    }
+
     fn as_canonical_biguint(&self) -> BigUint {
         // `monty_mul` strips out a factor of `R` so multiplying by `1` converts a montgomery
         // representation into a canonical representation.
@@ -623,13 +637,31 @@ impl Distribution<Ed25519> for StandardUniform {
         // the same field element on the Montgomery host and the canonical zkvm guest
         // (native-field-fork). `from_bytes_monty` treats the bytes as internal limbs (Montgomery vs
         // canonical) -> different values, which breaks cross-platform Brakedown/Basefold code matrices.
-        loop {
-            let mut trial_element: [u8; 32] = rng.random();
-            trial_element[31] &= (1_u8 << 7) - 1;
-            let bi = num_bigint::BigUint::from_bytes_le(&trial_element);
-            if let Some(val) = Ed25519::from_biguint(bi) {
-                return val;
-            }
+        // Value-identical to `from_biguint` on a masked 32-byte draw (which has
+        // at most four u64 digits, so that path never returns `None`), but with
+        // no `BigUint`: the round trip through `from_bytes_le` and `to_bytes_le`
+        // allocated twice per element and measured **5,127 instructions in an
+        // rv32 zkVM guest**, against ~190 for a field multiplication. Building a
+        // foldable code samples one of these per twist, so it was the dominant
+        // term in the OpenVM recursion guest's setup.
+        let mut trial_element: [u8; 32] = rng.random();
+        trial_element[31] &= (1_u8 << 7) - 1;
+        let inner: [u64; 4] = core::array::from_fn(|i| {
+            u64::from_le_bytes(
+                trial_element[i * 8..i * 8 + 8]
+                    .try_into()
+                    .expect("eight bytes"),
+            )
+        });
+        // A 4-limb value can exceed P; `monty_mul(R², inner)` is `inner mod P`
+        // in Montgomery form. The guest's representation is already canonical.
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            Ed25519::new_monty(monty_mul(ED25519_MONTY_R_SQ, inner))
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            Ed25519::new_monty(inner)
         }
     }
 }
