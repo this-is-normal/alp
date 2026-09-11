@@ -185,7 +185,7 @@ type PermBB = CountingPerm;
 /// during profiling. Value-identical to the inner permutation.
 #[cfg(all(feature = "bb-hash", feature = "count-ops"))]
 #[derive(Clone, Debug)]
-pub struct CountingPerm(Poseidon2BabyBear<BB_WIDTH>);
+pub struct CountingPerm(MontyBypass<Poseidon2BabyBear<BB_WIDTH>>);
 #[cfg(all(feature = "bb-hash", feature = "count-ops"))]
 impl Permutation<[BabyBear; BB_WIDTH]> for CountingPerm {
     fn permute_mut(&self, input: &mut [BabyBear; BB_WIDTH]) {

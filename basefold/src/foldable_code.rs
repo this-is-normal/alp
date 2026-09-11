@@ -49,7 +49,7 @@ const SEED_STRIDE: u64 = 0x9E37_79B9_7F4A_7C15;
 /// each position reachable on its own, which is what
 /// [`RandomFoldableCode::new_verifier`] needs. Rejection stays inside the
 /// element's own stream, so it does not disturb addressability.
-fn sample_nonzero_at<F: Field>(seed: u64, idx: usize) -> F
+pub fn sample_nonzero_at<F: Field>(seed: u64, idx: usize) -> F
 where
     StandardUniform: Distribution<F>,
 {
@@ -65,7 +65,7 @@ where
 
 /// Global index of `twist[level][0]`. `g0` occupies `0..inv_rate`, and level
 /// `i` the `inv_rate·2^{i−1}` slots starting at `inv_rate·2^{i−1}`.
-const fn level_base(inv_rate: usize, level: usize) -> usize {
+pub const fn level_base(inv_rate: usize, level: usize) -> usize {
     inv_rate << (level - 1)
 }
 
@@ -102,6 +102,11 @@ pub struct RandomFoldableCode<F> {
     twist: Option<Vec<Vec<F>>>,
     /// Elementwise inverses of `twist`, likewise absent when lazy.
     tinv: Option<Vec<Vec<F>>>,
+    /// Lazy source for the *inverses*. Without it a lazy instance pays a field
+    /// inversion per queried position — 14,879 instructions in a zkVM guest,
+    /// which is what made the lazy path lose to eager construction even though
+    /// it touches 10x fewer positions.
+    sample_inv: Option<fn(u64, usize) -> F>,
     /// Lazy sampler, present exactly when `twist` is absent.
     ///
     /// A plain function pointer rather than a `StandardUniform: Distribution<F>`
@@ -148,7 +153,17 @@ where
         }
 
         let inv2 = F::TWO.try_inverse().expect("2 is invertible in an odd field");
-        Self { log_len, inv_rate, seed, g0, twist: Some(twist), tinv: Some(tinv), sample: None, inv2 }
+        Self {
+            log_len,
+            inv_rate,
+            seed,
+            g0,
+            twist: Some(twist),
+            tinv: Some(tinv),
+            sample: None,
+            sample_inv: None,
+            inv2,
+        }
     }
 
     /// The **verifier's** constructor: the same code, holding only the seed and
@@ -164,8 +179,50 @@ where
     /// [`sample_nonzero_at`], and `fold_pair` inverts that single element
     /// rather than a whole level.
     pub fn new_verifier(log_len: usize, inv_rate: usize, seed: u64) -> Self {
+        Self::new_verifier_with_sampler(log_len, inv_rate, seed, sample_nonzero_at::<F>)
+    }
+
+    /// [`Self::new_verifier_with_sampler`] with the inverses supplied too.
+    ///
+    /// A verifier reads `t` and `1/t` at the queried positions. Both are
+    /// deterministic in the seed, so both can be baked: this is what makes the
+    /// lazy path strictly better than eager construction rather than a trade.
+    /// `sample_inv(seed, idx)` must equal `sample(seed, idx).inverse()`.
+    pub fn new_verifier_with_tables(
+        log_len: usize,
+        inv_rate: usize,
+        seed: u64,
+        sample: fn(u64, usize) -> F,
+        sample_inv: fn(u64, usize) -> F,
+    ) -> Self {
+        let mut code = Self::new_verifier_with_sampler(log_len, inv_rate, seed, sample);
+        code.sample_inv = Some(sample_inv);
+        code
+    }
+
+    /// [`Self::new_verifier`] with the element source supplied by the caller.
+    ///
+    /// The code is a deterministic function of its seed, so a *verifier* need
+    /// not derive it at all — it can read it from a table baked into the
+    /// program at build time. In a zkVM guest that is the difference between
+    /// **6,809 instructions per twist and 34**: the parameters are public and
+    /// fixed, but the VM has no cross-run state, so every proof re-derives them
+    /// unless they live in the image. At 16 signatures that was 56% of the
+    /// Quasar recursion guest.
+    ///
+    /// `sample` must agree with [`sample_nonzero_at`] on every index the
+    /// verifier can reach, or proofs will simply fail: the index layout is
+    /// `0..inv_rate` for `g0` and [`level_base`]`(inv_rate, level) + j` for
+    /// `twist[level][j]`. Note a shorter code's indices are a *prefix* of a
+    /// longer one's, so one table serves every smaller shape.
+    pub fn new_verifier_with_sampler(
+        log_len: usize,
+        inv_rate: usize,
+        seed: u64,
+        sample: fn(u64, usize) -> F,
+    ) -> Self {
         assert!(inv_rate >= 2, "inverse rate must be >= 2");
-        let g0: Vec<F> = (0..inv_rate).map(|i| sample_nonzero_at(seed, i)).collect();
+        let g0: Vec<F> = (0..inv_rate).map(|i| sample(seed, i)).collect();
         let inv2 = F::TWO.try_inverse().expect("2 is invertible in an odd field");
         Self {
             log_len,
@@ -174,7 +231,8 @@ where
             g0,
             twist: None,
             tinv: None,
-            sample: Some(sample_nonzero_at::<F>),
+            sample: Some(sample),
+            sample_inv: None,
             inv2,
         }
     }
@@ -185,13 +243,16 @@ impl<F: Field> RandomFoldableCode<F> {
     /// `1/t_level[j]`: an array read when the code is materialised, one
     /// sample-and-invert when it is lazy.
     fn tinv_at(&self, level: usize, j: usize) -> F {
-        match &self.tinv {
-            Some(tinv) => tinv[level][j],
-            None => self
-                .diag_at(level, j)
-                .try_inverse()
-                .expect("twists are sampled nonzero"),
+        if let Some(tinv) = &self.tinv {
+            return tinv[level][j];
         }
+        let idx = level_base(self.inv_rate, level) + j;
+        if let Some(sample_inv) = self.sample_inv {
+            return sample_inv(self.seed, idx);
+        }
+        self.diag_at(level, j)
+            .try_inverse()
+            .expect("twists are sampled nonzero")
     }
 
     /// The materialised twists. Encoding and whole-codeword folding are prover
@@ -408,6 +469,51 @@ mod tests {
                 lazy.fold_pair(a, b, level, 0, alpha),
                 "fold_pair mismatch at level {level}"
             );
+        }
+    }
+
+    /// A code built from a *table* of precomputed elements is the same code —
+    /// which is what lets a guest bake its public parameters into the image.
+    #[test]
+    fn baked_sampler_matches_the_derived_code() {
+        const SEED: u64 = 0xBA5E_F01D;
+        const INV_RATE: usize = 4;
+        const LOG_LEN: usize = 6;
+
+        // Exactly what a build script would emit: every reachable index.
+        let table: Vec<F> = (0..(INV_RATE << LOG_LEN))
+            .map(|i| sample_nonzero_at::<F>(SEED, i))
+            .collect();
+        // A function pointer cannot capture, so the table goes through a
+        // static — exactly the shape a generated `pub static TABLE` gives.
+        static TABLE: spin::Once<Vec<F>> = spin::Once::new();
+        TABLE.call_once(|| table);
+        fn baked(_seed: u64, idx: usize) -> F {
+            TABLE.get().expect("initialised")[idx]
+        }
+
+        let derived = RandomFoldableCode::<F>::new_verifier(LOG_LEN, INV_RATE, SEED);
+        let baked_code =
+            RandomFoldableCode::<F>::new_verifier_with_sampler(LOG_LEN, INV_RATE, SEED, baked);
+
+        assert_eq!(derived.g0, baked_code.g0, "base generator");
+        for level in 1..=LOG_LEN {
+            for j in 0..(INV_RATE << (level - 1)) {
+                assert_eq!(
+                    derived.diag_at(level, j),
+                    baked_code.diag_at(level, j),
+                    "twist mismatch at level {level} index {j}"
+                );
+            }
+        }
+
+        // The prefix property one table relies on: a shorter code reads the
+        // front of a longer code's table.
+        let short = RandomFoldableCode::<F>::new_verifier(LOG_LEN - 2, INV_RATE, SEED);
+        for level in 1..=(LOG_LEN - 2) {
+            for j in 0..(INV_RATE << (level - 1)) {
+                assert_eq!(short.diag_at(level, j), derived.diag_at(level, j));
+            }
         }
     }
 }

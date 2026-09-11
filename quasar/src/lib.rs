@@ -55,3 +55,52 @@ pub use params::QuasarParams;
 pub use pcs::{QuasarError, QuasarPcs, QuasarProof, QuasarProverData, QuasarProverKey};
 pub use prescribed_pcs::{QuasarMlError, QuasarMlPcs, QuasarMlProof, QuasarMlProverData};
 pub use util::{eq_eval, eq_table, eval_mle, wht_mle_eval, wht_mle_table};
+
+/// Attributes pruned-Merkle work to each of the two Basefold openings.
+///
+/// The two openings run identical code on near-identical proof shapes — the
+/// coefficient one is *smaller* — yet ablation measured it at 3.4x the online
+/// one inside the OpenVM guest. This records what each actually did, so the
+/// asymmetry is attributed rather than guessed at.
+#[cfg(feature = "count-ops")]
+pub mod opening_probe {
+    use core::sync::atomic::{AtomicU64, Ordering};
+
+    pub static ONLINE_CALLS: AtomicU64 = AtomicU64::new(0);
+    pub static ONLINE_PATHS: AtomicU64 = AtomicU64::new(0);
+    pub static COEFF_CALLS: AtomicU64 = AtomicU64::new(0);
+    pub static COEFF_PATHS: AtomicU64 = AtomicU64::new(0);
+
+    /// `(calls, query_paths)` of pruned-batch verification so far.
+    #[must_use]
+    pub fn merkle_snapshot() -> (u64, u64) {
+        p3_merkle_tree::pruned_counter::snapshot()
+    }
+
+    pub fn record_online(before: (u64, u64), after: (u64, u64)) {
+        ONLINE_CALLS.fetch_add(after.0 - before.0, Ordering::Relaxed);
+        ONLINE_PATHS.fetch_add(after.1 - before.1, Ordering::Relaxed);
+    }
+
+    pub fn record_coeff(before: (u64, u64), after: (u64, u64)) {
+        COEFF_CALLS.fetch_add(after.0 - before.0, Ordering::Relaxed);
+        COEFF_PATHS.fetch_add(after.1 - before.1, Ordering::Relaxed);
+    }
+
+    /// `(online_calls, online_paths, coeff_calls, coeff_paths)`.
+    #[must_use]
+    pub fn snapshot() -> (u64, u64, u64, u64) {
+        (
+            ONLINE_CALLS.load(Ordering::Relaxed),
+            ONLINE_PATHS.load(Ordering::Relaxed),
+            COEFF_CALLS.load(Ordering::Relaxed),
+            COEFF_PATHS.load(Ordering::Relaxed),
+        )
+    }
+
+    pub fn reset() {
+        for a in [&ONLINE_CALLS, &ONLINE_PATHS, &COEFF_CALLS, &COEFF_PATHS] {
+            a.store(0, Ordering::Relaxed);
+        }
+    }
+}

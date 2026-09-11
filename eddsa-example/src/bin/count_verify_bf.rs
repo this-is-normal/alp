@@ -40,6 +40,9 @@ mod guest_cost {
     /// modular precompile rather than exponentiating.
     pub const INV: u64 = 14_879;
     pub const SPLIT: u64 = 222;
+    /// One query-path through the **pruned** batch verifier — what the
+    /// recursion guest actually calls. Measured at depth 14 with 136 queries.
+    pub const PRUNED_QUERY_PATH: u64 = 9_593;
 }
 
 fn main() {
@@ -79,6 +82,9 @@ fn main() {
     {
         p3_ed25519::counters::reset();
         p3_field::split_counter::reset();
+        p3_merkle_tree::pruned_counter::reset();
+        #[cfg(feature = "quasar")]
+        p3_quasar::opening_probe::reset();
     }
 
     let res = verify(
@@ -98,6 +104,7 @@ fn main() {
             if p != 0 { p } else { c.hash }
         };
         let splits = p3_field::split_counter::snapshot();
+        let (pruned_calls, query_paths) = p3_merkle_tree::pruned_counter::snapshot();
 
         // Hashing = the permutations plus the limb decomposition that feeds them.
         let perm_cost = perms * guest_cost::PERM;
@@ -129,6 +136,24 @@ fn main() {
         println!("  {:<22} {:>12} {:>7} {:>14} {:>6.1}%", "HASHING", "", "", hash_cost, pct(hash_cost));
         println!("  {:<22} {:>12} {:>7} {:>14} {:>6.1}%", "ARITHMETIC", "", "", arith_cost, pct(arith_cost));
         println!("  {:<22} {:>12} {:>7} {:>14}", "modelled total", "", "", total);
+
+        // Which of Quasar's two Basefold openings does the pruned-Merkle work?
+        #[cfg(feature = "quasar")]
+        {
+            let (oc, op, cc, cp) = p3_quasar::opening_probe::snapshot();
+            println!(
+                "  basefold openings: online {oc} pruned calls / {op} query-paths; \
+                 coefficient {cc} calls / {cp} query-paths"
+            );
+        }
+
+        // The Merkle share, costed on the function the guest really calls.
+        let merkle_cost = query_paths * guest_cost::PRUNED_QUERY_PATH;
+        println!(
+            "  pruned verify_multi_batch calls {pruned_calls}, query-paths {query_paths} \
+             -> {merkle_cost} instructions at {} each",
+            guest_cost::PRUNED_QUERY_PATH
+        );
     }
     #[cfg(not(feature = "count-ops"))]
     println!("{NAME} verify_ok={:?} (build with --features count-ops)", res.is_ok());

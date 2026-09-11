@@ -594,6 +594,13 @@ impl<F: Field, M: Mmcs<F>> BasefoldPcs<F, M> {
         }
         challenger.observe_algebra_element(proof.final_value);
 
+        // COST ABLATION ONLY — never enable in a real verifier. Stops after the
+        // sumcheck replay, so the guest's instruction count isolates that phase.
+        #[cfg(feature = "ablate-after-sumcheck")]
+        return Ok(());
+
+        #[allow(unreachable_code)]
+        {
         self.check_grind(proof.pow_witness, challenger)?;
         let indices = self.query_indices(challenger);
         if proof.queries.len() != d {
@@ -630,6 +637,12 @@ impl<F: Field, M: Mmcs<F>> BasefoldPcs<F, M> {
                 .map_err(|_| "merkle verify failed")?;
         }
 
+        // COST ABLATION ONLY — stops after Merkle verification, before the
+        // per-query fold-consistency walk.
+        #[cfg(feature = "ablate-after-merkle")]
+        return Ok(());
+
+        #[allow(unreachable_code)]
         for (qi, &s) in indices.iter().enumerate() {
             let mut prev_folded: Option<F> = None;
             for i in 0..d {
@@ -666,6 +679,7 @@ impl<F: Field, M: Mmcs<F>> BasefoldPcs<F, M> {
             }
         }
         Ok(())
+        }
     }
 
     /// Integration-facing verify (mirrors `TensorPcs::verify_opening`): does NOT take an external

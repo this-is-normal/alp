@@ -18,7 +18,7 @@ mod merkle_pcs;
 mod pcs;
 mod prescribed_pcs;
 
-pub use foldable_code::{FoldableCode, RandomFoldableCode};
+pub use foldable_code::{FoldableCode, RandomFoldableCode, level_base, sample_nonzero_at};
 pub use grinding::grind_parallel;
 pub use merkle_pcs::{BasefoldBatchProverData, BasefoldPcs, BasefoldProof, BasefoldProverData};
 pub use pcs::{BasefoldCore, BasefoldCoreProof, eval_multilinear};

@@ -81,7 +81,27 @@ fn main() {
     #[cfg(not(feature = "quasar"))]
     let quasar_setup = ();
 
-    let blob = postcard::to_allocvec(&(
+    // `BLOB_STATS=1` breaks the blob down by component — the recursion guest
+    // pays ~700 instructions per field element to parse this, so knowing which
+    // part dominates says whether to attack the codec or the content.
+    if std::env::var("BLOB_STATS").is_ok() {
+        let n = |b: usize| format!("{b} B ({} field elements)", b / 32);
+        eprintln!("  commitment          {}", n(p3_stark_stats::serialized_size(&proof.commitment)));
+        eprintln!("  zerocheck sumcheck  {}", n(p3_stark_stats::serialized_size(&proof.sumcheck)));
+        eprintln!("  main opening        {}", n(p3_stark_stats::serialized_size(&proof.opening)));
+        eprintln!(
+            "  preprocessed openin {}",
+            n(p3_stark_stats::serialized_size(&proof.preprocessed_opening))
+        );
+        eprintln!("  verifying key       {}", n(p3_stark_stats::serialized_size(&vk)));
+    }
+
+    // The flat format, not postcard: the guest deserialises this before it can
+    // verify anything, and postcard's per-element machinery cost it ~710
+    // instructions per field element against ~152 for a flat read. Slightly
+    // larger on the wire (fixed-width lengths); the payload is incompressible
+    // 32-byte field elements either way.
+    let blob = p3_flat_serde::to_allocvec(&(
         num_bits as u64,
         log_instances as u64,
         log_height as u64,

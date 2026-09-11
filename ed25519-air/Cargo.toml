@@ -24,6 +24,8 @@ p3-challenger = { path = "../challenger" }
 p3-commit = { path = "../commit", features = ["test-utils"] }
 p3-dft = { path = "../dft" }
 p3-field-testing = { path = "../field-testing" }
+p3-ed25519 = { path = "../ed25519" }
+rand_chacha = { version = "0.10", default-features = false }
 
 rand.workspace = true
 

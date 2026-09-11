@@ -24,11 +24,17 @@ serde = { workspace = true, features = ["derive", "alloc"] }
 tracing.workspace = true
 
 [features]
+# COST ABLATION ONLY: `verify_core` returns Ok early, so a recursion guest's
+# instruction count can be split by phase. Never enable in a real verifier.
+ablate-after-sumcheck = []
+ablate-after-merkle = []
 # Rayon parallelism across the foldable-code encode, the fold rounds, and the
 # per-round sumcheck reductions — BaseFold's whole prover.
 parallel = ["p3-maybe-rayon/parallel"]
 
 [dev-dependencies]
+# Test-only: a no_std `Once` to hold a generated table behind a `fn` pointer.
+spin = { workspace = true }
 p3-ed25519 = { path = "../ed25519" }
 p3-merkle-tree = { path = "../merkle-tree" }
 p3-symmetric = { path = "../symmetric" }

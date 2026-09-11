@@ -47,7 +47,18 @@ pub(crate) const ED25519_MONTY_MU_64: u64 = 0x79435e50d79435e5;
 pub(crate) const ED25519_MONTY_R_SQ: [u64; 4] = [0x00000000000005a4, 0, 0, 0];
 
 /// The ed25519 base field, defined as `F_P` where `P = 2^255 - 19`.
+///
+/// **Alignment on zkvm.** OpenVM's modular precompile operates on
+/// `#[repr(C, align(32))] struct Ed25519Fp([u8; 32])`, so an unaligned
+/// `[u64; 4]` has to be *copied* into that type and back around every
+/// operation — three 32-byte copies per multiply, measured at **178
+/// instructions against 34 for the bare chip op**. Giving the struct the
+/// chip's alignment makes the two layouts identical (both are 32 canonical
+/// little-endian bytes), so [`zk::as_fp`] is a pointer cast and the copies
+/// disappear. Costs nothing: the struct is already exactly 32 bytes, so
+/// alignment adds no padding and arrays keep a stride of 32.
 #[derive(Copy, Clone, Default, Eq, PartialEq)]
+#[cfg_attr(target_os = "zkvm", repr(C, align(32)))]
 #[must_use]
 pub struct Ed25519 {
     /// The MONTY form of the field element, a 255-bit integer less than `P` saved as a collection of u64's using a little-endian order.
@@ -98,6 +109,28 @@ impl Ed25519 {
 
     #[inline]
     #[allow(clippy::needless_pass_by_value)]
+    /// Construct from the canonical little-endian 4-word representation.
+    ///
+    /// The inverse of [`PrimeField::canonical_u64_words`]. On a zkVM guest the
+    /// canonical form *is* the internal representation, so this is a copy —
+    /// which is what makes a table of precomputed field elements readable for
+    /// ~34 instructions instead of ~6,809 to re-derive one.
+    ///
+    /// # Panics
+    ///
+    /// Never, but values `>= P` are reduced on the host and taken as-is on the
+    /// guest; pass canonical words.
+    pub const fn from_canonical_words(words: [u64; 4]) -> Self {
+        #[cfg(not(target_os = "zkvm"))]
+        {
+            Self::new_monty(monty_mul(ED25519_MONTY_R_SQ, words))
+        }
+        #[cfg(target_os = "zkvm")]
+        {
+            Self::new_monty(words)
+        }
+    }
+
     pub fn from_biguint(value: BigUint) -> Option<Self> {
         #[cfg(target_os = "zkvm")]
         { Some(Self::new_monty(zk::from_bu(value))) }
@@ -158,18 +191,47 @@ pub(crate) mod zk {
         Ed25519Fp { modulus = "57896044618658097711785492504343953926634992332820282019728792003956564819949" },
     }
     #[inline]
+    /// Borrow the canonical words *as* the precompile's type, with no copy.
+    ///
+    /// # Safety
+    ///
+    /// `Ed25519Fp` is `#[repr(C, align(32))]` over `[u8; 32]` and the caller's
+    /// `[u64; 4]` lives inside an `Ed25519`, which carries `align(32)` on this
+    /// target — so size and alignment match. The byte patterns agree because
+    /// both are the canonical value little-endian, which on zkvm is exactly
+    /// what `Ed25519::value` holds.
+    #[inline]
+    pub(crate) fn as_fp(v: &[u64; 4]) -> &Ed25519Fp {
+        const {
+            assert!(core::mem::size_of::<Ed25519Fp>() == 32);
+            assert!(core::mem::align_of::<Ed25519Fp>() == 32);
+        }
+        unsafe { &*core::ptr::from_ref(v).cast::<Ed25519Fp>() }
+    }
+
+    /// Inverse of [`as_fp`], by value — a move, so alignment is irrelevant.
+    #[inline]
+    pub(crate) fn into_words(x: Ed25519Fp) -> [u64; 4] {
+        const {
+            assert!(core::mem::size_of::<Ed25519Fp>() == 32);
+        }
+        unsafe { core::mem::transmute::<Ed25519Fp, [u64; 4]>(x) }
+    }
+
+    #[allow(dead_code)]
     fn to_fp(v: [u64; 4]) -> Ed25519Fp {
         let bytes: [u8; 32] = unsafe { core::mem::transmute(v.map(u64::to_le_bytes)) };
         Ed25519Fp::from_le_bytes_unchecked(&bytes)
     }
     #[inline]
+    #[allow(dead_code)]
     fn from_fp(x: &Ed25519Fp) -> [u64; 4] {
         let b = x.as_le_bytes();
         core::array::from_fn(|i| u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap()))
     }
     #[inline]
-    pub(crate) fn mul(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
-        from_fp(&(&to_fp(a) * &to_fp(b)))
+    pub(crate) fn mul(a: &[u64; 4], b: &[u64; 4]) -> [u64; 4] {
+        into_words(as_fp(a) * as_fp(b))
     }
     #[inline]
     pub(crate) fn from_bu(b: BigUint) -> [u64; 4] {
@@ -183,33 +245,117 @@ pub(crate) mod zk {
     }
 }
 
+impl Ed25519 {
+    /// Parse the canonical little-endian 32-byte form, rejecting anything
+    /// `>= P`.
+    ///
+    /// No `BigUint`: the bytes become four `u64`s, the bound check is a
+    /// four-word comparison, and construction is [`Self::from_canonical_words`].
+    /// The obvious implementation allocated a `Vec<u8>`, two `BigUint`s **and a
+    /// third for the modulus on every call**, which cost ~1,830 instructions
+    /// per element in a zkVM guest — 57% of the Quasar recursion guest was
+    /// deserialising its own input.
+    #[must_use]
+    pub fn from_canonical_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 32 {
+            return None;
+        }
+        let words: [u64; 4] = core::array::from_fn(|i| {
+            u64::from_le_bytes(
+                bytes[i * 8..i * 8 + 8]
+                    .try_into()
+                    .expect("eight bytes"),
+            )
+        });
+        // words < P, little-endian: compare from the most significant word down.
+        let mut canonical = false;
+        for i in (0..4).rev() {
+            if words[i] < ED25519_PRIME[i] {
+                canonical = true;
+                break;
+            }
+            if words[i] > ED25519_PRIME[i] {
+                return None;
+            }
+        }
+        if !canonical {
+            return None; // equal to P
+        }
+        Some(Self::from_canonical_words(words))
+    }
+
+    /// The canonical little-endian 32-byte form.
+    #[must_use]
+    pub fn to_canonical_bytes(&self) -> [u8; 32] {
+        let mut words = [0u64; 8];
+        let _ = <Self as p3_field::PrimeField>::canonical_u64_words(self, &mut words);
+        let mut bytes = [0u8; 32];
+        for i in 0..4 {
+            bytes[i * 8..i * 8 + 8].copy_from_slice(&words[i].to_le_bytes());
+        }
+        bytes
+    }
+}
+
 impl Serialize for Ed25519 {
     /// Serializes to the canonical little-endian 32-byte representation (matches host & zkvm reprs).
     #[inline]
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut bytes = [0u8; 32];
-        for (i, b) in self.as_canonical_biguint().to_bytes_le().into_iter().take(32).enumerate() {
-            bytes[i] = b;
-        }
-        serializer.serialize_bytes(&bytes)
+        serializer.serialize_bytes(&self.to_canonical_bytes())
     }
 }
 
 impl<'de> Deserialize<'de> for Ed25519 {
-    /// Deserializes from raw bytes, which correspond to the Montgomery representation of the field element.
-    /// Performs a check that the deserialized field element corresponds to a value less than the field modulus, and
-    /// returns an error otherwise.
+    /// Deserializes the canonical little-endian 32-byte form, rejecting values
+    /// `>= P` (so an encoding is unique and the transcript unambiguous).
     #[inline]
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
-        let bytes: Vec<u8> = Deserialize::deserialize(d)?;
-        if bytes.len() != 32 {
-            return Err(serde::de::Error::custom("Invalid field element"));
+        struct Visitor;
+
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = Ed25519;
+
+            fn expecting(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+                f.write_str("32 canonical little-endian bytes")
+            }
+
+            fn visit_bytes<E: serde::de::Error>(self, bytes: &[u8]) -> Result<Ed25519, E> {
+                Ed25519::from_canonical_bytes(bytes)
+                    .ok_or_else(|| E::custom("Invalid field element"))
+            }
+
+            fn visit_borrowed_bytes<E: serde::de::Error>(
+                self,
+                bytes: &'de [u8],
+            ) -> Result<Ed25519, E> {
+                self.visit_bytes(bytes)
+            }
+
+            /// Formats that present bytes as a sequence (JSON, say).
+            ///
+            /// A wrong length is reported as `Invalid field element` rather than
+            /// serde's `invalid_length`, so every rejection reason a caller can
+            /// trigger reads the same — the length check and the `>= P` check
+            /// are both "this is not a field element".
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<Ed25519, A::Error> {
+                use serde::de::Error;
+                let invalid = || A::Error::custom("Invalid field element");
+                let mut buf = [0u8; 32];
+                for slot in &mut buf {
+                    *slot = seq.next_element()?.ok_or_else(invalid)?;
+                }
+                // Too long is as wrong as too short.
+                if seq.next_element::<u8>()?.is_some() {
+                    return Err(invalid());
+                }
+                Ed25519::from_canonical_bytes(&buf).ok_or_else(invalid)
+            }
         }
-        let bu = BigUint::from_bytes_le(&bytes);
-        if bu >= to_biguint(ED25519_PRIME) {
-            return Err(serde::de::Error::custom("Invalid field element"));
-        }
-        Self::from_biguint(bu).ok_or_else(|| serde::de::Error::custom("Invalid field element"))
+
+        d.deserialize_bytes(Visitor)
     }
 }
 
@@ -309,7 +455,7 @@ impl PrimeCharacteristicRing for Ed25519 {
         #[cfg(not(target_os = "zkvm"))]
         { Self::new_monty(monty_mul(self.value, self.value)) }
         #[cfg(target_os = "zkvm")]
-        { Self::new_monty(zk::mul(self.value, self.value)) }
+        { Self::new_monty(zk::mul(&self.value, &self.value)) }
     }
 }
 
@@ -620,7 +766,7 @@ impl Mul for Ed25519 {
         #[cfg(not(target_os = "zkvm"))]
         { Self::new_monty(monty_mul(self.value, rhs.value)) }
         #[cfg(target_os = "zkvm")]
-        { Self::new_monty(zk::mul(self.value, rhs.value)) }
+        { Self::new_monty(zk::mul(&self.value, &rhs.value)) }
     }
 }
 

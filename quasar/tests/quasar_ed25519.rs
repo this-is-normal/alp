@@ -355,3 +355,44 @@ fn verifier_only_instance_matches_the_full_one() {
         .verify(&commitment, &point, value + F::ONE, &proof, &mut challenger())
         .expect_err("verifier-only instance must reject a wrong value");
 }
+
+/// Why is the *coefficient* Basefold opening 3.4x the *online* one in the
+/// OpenVM guest (42.9 M vs 12.5 M instructions at 16 signatures), when it
+/// batches fewer polynomials at the same point with the same query count?
+///
+/// Prints the shape of both openings so the asymmetry can be attributed rather
+/// than guessed at. Run with `--nocapture`.
+#[test]
+fn opening_shapes_online_vs_coefficient() {
+    let (log_rows, log_cols, index) = (3, 6, 2);
+    let (pcs, pk) = build(log_rows, log_cols, index);
+    let num_vars = log_rows + log_cols;
+    let mut rng = ChaCha8Rng::seed_from_u64(77);
+    let evals = rand_evals(&mut rng, num_vars);
+    let point = rand_point(&mut rng, num_vars);
+
+    let mut ch = challenger();
+    let (_commitment, pd) = pcs.commit(evals, &mut ch);
+    let (_value, proof) = pcs.open(&pk, &pd, &point, &mut ch);
+
+    let describe = |name: &str, opening: &p3_basefold::BasefoldProof<F, MyMmcs>| {
+        let rounds = opening.queries.len();
+        let mut total_opened = 0usize;
+        let mut widths = Vec::new();
+        for round in &opening.queries {
+            let rows = round.opened_values.len();
+            let width = round.opened_values.first().map_or(0, |v| v[0].len());
+            total_opened += rows * width;
+            widths.push((rows, width));
+        }
+        println!(
+            "{name}: rounds={rounds} fold_roots={} sumcheck={} opened_elements={total_opened}",
+            opening.fold_roots.len(),
+            opening.sumcheck.len(),
+        );
+        println!("  (rows, width) per round: {widths:?}");
+    };
+
+    describe("online   ", &proof.online_opening);
+    describe("coeff    ", &proof.coeff_opening);
+}

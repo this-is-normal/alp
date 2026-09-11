@@ -232,6 +232,15 @@ where
         })
         .collect::<Vec<_>>();
 
+    // COST ABLATION ONLY — never enable in a real verifier. Stops after both
+    // PCS openings and before the closing AIR-constraint evaluation, so a
+    // recursion guest's cost can be attributed to the PCS or to the AIR.
+    #[cfg(feature = "ablate-before-closing")]
+    {
+        let _ = (&main_openings, &preprocessed_openings);
+        return Ok(());
+    }
+
     // 6. Close the zerocheck: recompute g from commitment-bound values and match
     // the reduced sum.
     zerocheck

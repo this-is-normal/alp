@@ -23,8 +23,19 @@ tracing.workspace = true
 
 serde = { workspace = true, features = ["derive", "alloc"] }
 p3-maybe-rayon.workspace = true
+# Only for the `count-ops` probe; the scheme itself is Mmcs-generic.
+p3-merkle-tree = { path = "../merkle-tree", optional = true }
 
 [features]
+# COST ABLATION ONLY: `verify_core` returns Ok early so a recursion guest's
+# instruction count can be split by phase. Never enable in a real verifier.
+# INSTRUMENTATION ONLY: attribute pruned-Merkle work to each Basefold opening.
+count-ops = ["dep:p3-merkle-tree", "p3-merkle-tree/count-ops"]
+ablate-after-columns = []
+ablate-after-encoding = []
+ablate-after-reduction = []
+ablate-after-online-opening = []
+ablate-after-both-openings = []
 parallel = [
     "p3-maybe-rayon/parallel",
     "p3-qa-code/parallel",

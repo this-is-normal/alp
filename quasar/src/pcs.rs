@@ -694,6 +694,13 @@ impl<F: Field, M: Mmcs<F>> QuasarPcs<F, M> {
             return Err(QuasarError::ColumnConsistency);
         }
 
+        // COST ABLATION ONLY — never enable in a real verifier. Stops after the
+        // sampled-column Merkle check and the selector claim, so a recursion
+        // guest's instruction count isolates the column phase.
+        #[cfg(feature = "ablate-after-columns")]
+        return Ok(());
+
+        #[allow(unreachable_code)]
         let (e1, selector_final) = proof
             .selector
             .verify(challenger, params.log_codeword_len(), 2, 0)
@@ -765,6 +772,11 @@ impl<F: Field, M: Mmcs<F>> QuasarPcs<F, M> {
         }
         challenger.observe_algebra_slice(&proof.input_evals_at_e3);
 
+        // COST ABLATION ONLY — stops after the QA-encoding sumchecks, before
+        // claim reduction and the two batched Basefold openings.
+        #[cfg(feature = "ablate-after-encoding")]
+        return Ok(());
+
         // --- Claim reduction and the two batched openings. ---
         let claims = self.collect_claims(
             e1_lo,
@@ -802,10 +814,18 @@ impl<F: Field, M: Mmcs<F>> QuasarPcs<F, M> {
         }
         challenger.observe_algebra_slice(&proof.evals_at_zeta);
 
+        // COST ABLATION ONLY — stops after claim reduction, before the two
+        // batched Basefold openings.
+        #[cfg(feature = "ablate-after-reduction")]
+        return Ok(());
+
+        #[allow(unreachable_code)]
         let eta: F = challenger.sample_algebra_element();
         let online_etas = powers(eta, params.num_online_blocks());
         let coeff_etas = powers(eta, params.num_coeff_vectors());
 
+        #[cfg(feature = "count-ops")]
+        let probe_before = crate::opening_probe::merkle_snapshot();
         let online_value = self
             .basefold
             .verify_batch_opening(
@@ -816,6 +836,16 @@ impl<F: Field, M: Mmcs<F>> QuasarPcs<F, M> {
                 challenger,
             )
             .map_err(QuasarError::Basefold)?;
+        #[cfg(feature = "count-ops")]
+        let probe_mid = crate::opening_probe::merkle_snapshot();
+        #[cfg(feature = "count-ops")]
+        crate::opening_probe::record_online(probe_before, probe_mid);
+
+        // COST ABLATION ONLY — stops after the FIRST (online) Basefold opening.
+        #[cfg(feature = "ablate-after-online-opening")]
+        return Ok(());
+
+        #[allow(unreachable_code)]
         let coeff_value = self
             .basefold
             .verify_batch_opening(
@@ -826,6 +856,17 @@ impl<F: Field, M: Mmcs<F>> QuasarPcs<F, M> {
                 challenger,
             )
             .map_err(QuasarError::Basefold)?;
+
+        #[cfg(feature = "count-ops")]
+        crate::opening_probe::record_coeff(probe_mid, crate::opening_probe::merkle_snapshot());
+
+        // COST ABLATION ONLY — stops after BOTH Basefold openings, before the
+        // final batched-value equality checks.
+        #[cfg(feature = "ablate-after-both-openings")]
+        {
+            let _ = (online_value, coeff_value);
+            return Ok(());
+        }
 
         let expected_online: F = online_etas
             .iter()

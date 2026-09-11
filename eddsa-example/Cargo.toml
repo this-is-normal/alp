@@ -28,6 +28,7 @@ p3-symmetric.workspace = true
 p3-util.workspace = true
 
 num-bigint.workspace = true
+p3-flat-serde.workspace = true
 postcard = { workspace = true, features = ["alloc"] }
 rand.workspace = true
 tracing.workspace = true
@@ -61,9 +62,11 @@ quasar = []
 # OpenVM verifier; the committed data, linear code, and sumcheck stay over ed25519. This is
 # the recursion/guest operating point; the default keeps the pure-ed25519 hash for host comparison.
 bb-hash = ["dep:p3-baby-bear"]
-count-ops = ["p3-ed25519/count-ops", "p3-field/count-ops"]
+count-ops = ["p3-ed25519/count-ops", "p3-field/count-ops", "p3-merkle-tree/count-ops", "p3-quasar/count-ops"]
 # COST ABLATION ONLY (see p3-multi-stark).
 ablate-zerocheck-only = ["p3-multi-stark/ablate-zerocheck-only"]
+ablate-after-sumcheck = ["p3-basefold/ablate-after-sumcheck"]
+ablate-after-merkle = ["p3-basefold/ablate-after-merkle"]
 
 [lints]
 workspace = true

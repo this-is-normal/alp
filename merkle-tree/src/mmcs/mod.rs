@@ -477,6 +477,9 @@ impl<P, PW, H, C, const N: usize, const DIGEST_ELEMS: usize>
         //
         // The geometry gate also returns the tallest height.
         // That height bounds the leaf indices and seeds the amortized walk below.
+        #[cfg(feature = "count-ops")]
+        crate::pruned_counter::on_verify(indices.len());
+
         let max_height =
             validate_commit_reachable_heights(dimensions.iter().map(|dims| dims.height))?;
         let arity_schedule = self.proof_arity_schedule(dimensions)?;
