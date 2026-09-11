@@ -6,7 +6,7 @@
 //! features select (Brakedown by default; `ligero`, `basefold` or `quasar`).
 
 
-use eddsa_example::config::{F, challenger, config_for_eddsa};
+use eddsa_example::config::{F, challenger, config_for_eddsa_with_security};
 use eddsa_example::curve::{base_b, d, subgroup_order, valid_instance};
 use p3_ed25519_air::eddsa::{
     EdDsaAir, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS, generate_trace_rows, public_values,
@@ -18,6 +18,18 @@ use p3_multi_stark::{
 };
 use p3_sumcheck::layout::Table;
 use p3_util::log2_ceil_usize;
+
+/// Soundness target for these tests.
+///
+/// Not the production 100 bits. Brakedown's query count is distance-derived, and
+/// at 100 bits it needs more columns than these tiny traces have — the smallest
+/// committed polynomial here is the preprocessed one at ~2^10, which can open at
+/// most ~1.7k columns against the ~2.9k that 100 bits demands. `build_pcs` now
+/// panics rather than silently clamp to an insecure query count, so the tests
+/// target a level a small trace can honestly reach. Matches the value
+/// `eddsa_brakedown.rs` uses for the same reason.
+const TEST_SECURITY_BITS: usize = 40;
+
 
 const NUM_BITS: usize = 32;
 
@@ -36,7 +48,12 @@ fn fixture() -> (
     let air = EdDsaAir { d, base_b, num_bits: NUM_BITS, log_instances: 0 };
     let trace = generate_trace_rows(d, base_b, &l, inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let pis = public_values(inst.a, inst.r, &inst.s_bits, &inst.k_bits);
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa_with_security(
+        log_height,
+        NUM_EDDSA_COLS,
+        NUM_EDDSA_PREPROCESSED_COLS,
+        TEST_SECURITY_BITS,
+    );
     (config, air, Table::new(trace.transpose()), pis, log_height)
 }
 
@@ -115,7 +132,12 @@ fn eddsa_batched_roundtrips_and_rejects_a_corrupt_instance() {
     let first = &instances[0];
     let pis = public_values(first.a, first.r, &first.s_bits, &first.k_bits);
     let log_height = log2_ceil_usize(trace_height(NUM_BITS) * NUM_SIGS);
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa_with_security(
+        log_height,
+        NUM_EDDSA_COLS,
+        NUM_EDDSA_PREPROCESSED_COLS,
+        TEST_SECURITY_BITS,
+    );
     let (pk, vk) = setup(&config, &[&air], &mut challenger());
 
     let honest = generate_batch_trace(&instances);

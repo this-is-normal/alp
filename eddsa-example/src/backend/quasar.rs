@@ -108,7 +108,9 @@ fn choose_params(log_height: usize, width: usize) -> QuasarParams {
 }
 
 /// Build one Quasar PCS sized for a `2^log_height`-row, `width`-column trace.
-pub fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+/// Quasar derives its column and inner-Basefold query counts from `SECURITY_BITS`
+/// and `POW_BITS` below, so a caller-supplied target is unused here.
+pub fn build_pcs(log_height: usize, width: usize, _security_bits: usize) -> CodePcs {
     let params = choose_params(log_height, width);
     let bf_queries = basefold_queries();
     let log_cols = params.log_cols;

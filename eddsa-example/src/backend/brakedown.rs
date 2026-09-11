@@ -22,25 +22,36 @@ pub type CodePcs = BrakedownMlPcs<F, EF, Code, MyMmcs, L>;
 /// Fixed seed for the code's random expander matrices, so prover and verifier
 /// build the identical linear code.
 const CODE_SEED: u64 = 0xB2A4E_D0;
-/// Target soundness for the column-query count.
-const SECURITY_BITS: usize = 100;
+/// Row/column split strategy for the tensor commitment.
+///
+/// `MinSize` reproduces the old `optimal_log_rows` behaviour (smallest proof).
+/// `MinArith`/`MinHashes`/`MinVerify` trade proof size for fewer verifier
+/// operations — the axis that matters when a zkVM guest does the verifying.
+const SPLIT: p3_brakedown::params::SplitStrategy = p3_brakedown::params::SplitStrategy::MinSize;
 /// `false` = provable δ/3 radius (Ligero/Roth–Zémor); `true` = conjectured δ/2
 /// (Diamond–Posen Conjecture-1).
 const CONJECTURED: bool = false;
 
-/// Build one tensor PCS sized for a `2^log_height`-row, `width`-column trace.
+/// Build one tensor PCS sized for a `2^log_height`-row, `width`-column trace,
+/// targeting `security_bits` of column-query soundness.
 ///
 /// The committed polynomial stacks every trace column, so the scheme is sized
-/// for the stacked variable count `log_height + ceil(log2(width))`, split by the
-/// paper's optimal row/column rule.
-pub fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+/// for the stacked variable count `log_height + ceil(log2(width))`, split by
+/// [`SPLIT`].
+pub fn build_pcs(log_height: usize, width: usize, security_bits: usize) -> CodePcs {
     let stacked = log_height + log2_ceil_usize(width);
 
     // Small-proof preset (Haböck SdigCode6, δ=0.070, weights 9/12) with a
     // distance-derived query count.
     let preset = p3_brakedown::params::small_proof();
-    let t = preset.num_queries(SECURITY_BITS, CONJECTURED);
-    let log_rows = p3_brakedown::params::optimal_log_rows(stacked, t, &preset.params);
+    let t = preset.num_queries(security_bits, CONJECTURED);
+    // The cost model the split is optimised against: BabyBear hashing when the
+    // guest verifies, Poseidon2-over-ed25519 otherwise.
+    #[cfg(feature = "bb-hash")]
+    let model = p3_brakedown::params::SplitModel::bb_hash();
+    #[cfg(not(feature = "bb-hash"))]
+    let model = p3_brakedown::params::SplitModel::native();
+    let log_rows = p3_brakedown::params::choose_log_rows(stacked, t, &preset, &model, SPLIT);
     let cols = 1 << (stacked - log_rows);
 
     // ChaCha under `bb-hash` (portable, so an x86 prover and a riscv32 verifier

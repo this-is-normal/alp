@@ -30,7 +30,9 @@ const RADIUS: f64 = 0.350;
 const POW_BITS: usize = 16;
 
 /// Build one BaseFold PCS sized for a `2^log_height`-row, `width`-column trace.
-pub fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+/// Basefold's query count comes from its own list-decoding radius and grinding bits,
+/// not from a caller-supplied target, so `security_bits` is unused here.
+pub fn build_pcs(log_height: usize, width: usize, _security_bits: usize) -> CodePcs {
     // BaseFold commits the stacked polynomial directly.
     let num_variables = log_height + log2_ceil_usize(width);
     let code = RandomFoldableCode::<F>::new(num_variables, INV_RATE, CODE_SEED);

@@ -28,13 +28,13 @@ fn num_queries(rate: usize, security_bits: usize) -> usize {
 
 /// Build one RS tensor PCS sized for a `2^log_height`-row, `width`-column trace,
 /// with a square row/column split.
-pub fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+pub fn build_pcs(log_height: usize, width: usize, security_bits: usize) -> CodePcs {
     let stacked = log_height + log2_ceil_usize(width);
     let log_rows = stacked / 2;
     let cols = 1 << (stacked - log_rows);
 
     let code = ReedSolomonCode::new(cols, RATE * cols);
-    let t = core::cmp::min(num_queries(RATE, SECURITY_BITS), code.codeword_len());
+    let t = core::cmp::min(num_queries(RATE, security_bits), code.codeword_len());
     tracing::info!(
         "ligero RS[n={}, k={}] δ={:.2}: {} of {} columns queried ({}-bit target, capacity conjecture 1−ρ)",
         RATE * cols,
@@ -42,7 +42,7 @@ pub fn build_pcs(log_height: usize, width: usize) -> CodePcs {
         1.0 - 1.0 / RATE as f64,
         t,
         code.codeword_len(),
-        SECURITY_BITS,
+        security_bits,
     );
     CodePcs::new(TensorPcs::new(code, build_mmcs(), log_rows, t))
 }
