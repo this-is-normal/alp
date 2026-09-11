@@ -37,9 +37,15 @@ impl ProfileablePcs for BrakedownProfile {
         let counts = HashCounts::new();
         let mmcs = build_mmcs(&counts);
 
-        // Real distance-derived query count, then the paper's optimal row/column split for it.
+        // Real distance-derived query count, then the min-size (smallest-proof) split for it.
         let t = self.preset.num_queries(self.security_bits, self.conjectured);
-        let log_rows = p3_brakedown::params::optimal_log_rows(num_vars, t, &self.preset.params);
+        let log_rows = p3_brakedown::params::choose_log_rows(
+            num_vars,
+            t,
+            &self.preset,
+            &p3_brakedown::params::SplitModel::bb_hash(),
+            p3_brakedown::params::SplitStrategy::MinSize,
+        );
         let cols = 1usize << (num_vars - log_rows);
         let mut code_rng = ChaCha8Rng::seed_from_u64(self.code_seed);
         let code = BrakedownCode::<Ed25519, Ed25519>::from_message_len_with_params(

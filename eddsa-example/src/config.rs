@@ -263,18 +263,19 @@ const BRAKEDOWN_CODE_SEED: u64 = 0xB2A4E_D0;
 /// Reed–Solomon inverse rate `n/k` (distance δ = 1 − 1/rate). Rate 2 → δ = 0.5.
 #[cfg(feature = "ligero")]
 const LIGERO_RATE: usize = 2;
-/// Target security for the Ligero query count (bits).
-#[cfg(feature = "ligero")]
+/// Default target soundness (bits) for `config_for_eddsa` — Brakedown query count and the Ligero
+/// query count both derive from it. Override per-call via `config_for_eddsa_with_security`.
 const TARGET_SECURITY_BITS: usize = 100;
-/// Target soundness for the Brakedown path. The column-query count is now
-/// distance-derived from the chosen preset (see `p3_brakedown::params`):
-/// `t = ⌈λ/−log₂(1−e)⌉`, clamped to the codeword length. Replaces the old demo `32`.
-#[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
-const BRAKEDOWN_SECURITY_BITS: usize = 100;
 /// `false` = provable δ/3 radius (Ligero/Roth–Zémor); `true` = conjectured δ/2
 /// (Diamond–Posen Conjecture-1, the Reed–Solomon-proven analogue).
 #[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
 const BRAKEDOWN_CONJECTURED: bool = false;
+
+/// Row/column split strategy for the tensor commitment (see `p3_brakedown::params`).
+/// `MinSize` = smallest proof (the previous `optimal_log_rows` behaviour); `MinArith`/`MinHashes`/
+/// `MinVerify` trade proof size for fewer verifier ops/hashes — relevant when the guest verifies.
+#[cfg(all(not(feature = "ligero"), not(feature = "basefold")))]
+const BRAKEDOWN_SPLIT: p3_brakedown::params::SplitStrategy = p3_brakedown::params::SplitStrategy::MinSize;
 
 /// Number of column queries for a Reed–Solomon (Ligero) tensor test at
 /// `security_bits` bits, under the **list-decoding-up-to-capacity** conjecture:
@@ -290,8 +291,9 @@ fn ligero_num_queries(rate: usize, security_bits: usize) -> usize {
 const BRAKEDOWN_FOLDING: usize = 1;
 
 /// Build one Basefold PCS sized for a `2^log_height`-row, `width`-column trace.
+/// (`security_bits` is Brakedown's knob; Basefold's aggressive q=288 is fixed here.)
 #[cfg(feature = "basefold")]
-fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+fn build_pcs(log_height: usize, width: usize, _security_bits: usize) -> CodePcs {
     // Basefold commits the stacked polynomial (num_variables = log_height + ceil(log2 width)).
     let num_variables = log_height + log2_ceil_usize(width);
     let mmcs = build_mmcs();
@@ -307,10 +309,10 @@ fn build_pcs(log_height: usize, width: usize) -> CodePcs {
 /// Build one Brakedown/Ligero tensor PCS sized for a `2^log_height`-row, `width`-column trace.
 ///
 /// The committed polynomial stacks every trace column, so the tensor scheme is
-/// sized for the stacked variable count `log_height + ceil(log2(width))`. Brakedown uses the
-/// paper's optimal row/column split (`optimal_log_rows`); the RS/Ligero path uses a square split.
+/// sized for the stacked variable count `log_height + ceil(log2(width))`. Brakedown picks its
+/// row/column split via `choose_log_rows(BRAKEDOWN_SPLIT)`; the RS/Ligero path uses a square split.
 #[cfg(not(feature = "basefold"))]
-fn build_pcs(log_height: usize, width: usize) -> CodePcs {
+fn build_pcs(log_height: usize, width: usize, security_bits: usize) -> CodePcs {
     let stacked_num_variables = log_height + log2_ceil_usize(width);
 
     let mmcs = build_mmcs();
@@ -320,12 +322,21 @@ fn build_pcs(log_height: usize, width: usize) -> CodePcs {
     #[cfg(not(feature = "ligero"))]
     let bd_preset = p3_brakedown::params::small_proof();
     #[cfg(not(feature = "ligero"))]
-    let bd_t = bd_preset.num_queries(BRAKEDOWN_SECURITY_BITS, BRAKEDOWN_CONJECTURED);
+    let bd_t = bd_preset.num_queries(security_bits, BRAKEDOWN_CONJECTURED);
 
-    // Optimal (paper) row/column split for Brakedown; square for the RS/Ligero path.
+    // Strategy-chosen row/column split for Brakedown; square for the RS/Ligero path.
+    #[cfg(all(not(feature = "ligero"), feature = "bb-hash"))]
+    let bd_model = p3_brakedown::params::SplitModel::bb_hash();
+    #[cfg(all(not(feature = "ligero"), not(feature = "bb-hash")))]
+    let bd_model = p3_brakedown::params::SplitModel::native();
     #[cfg(not(feature = "ligero"))]
-    let log_rows =
-        p3_brakedown::params::optimal_log_rows(stacked_num_variables, bd_t, &bd_preset.params);
+    let log_rows = p3_brakedown::params::choose_log_rows(
+        stacked_num_variables,
+        bd_t,
+        &bd_preset,
+        &bd_model,
+        BRAKEDOWN_SPLIT,
+    );
     #[cfg(feature = "ligero")]
     let log_rows = stacked_num_variables / 2;
     let cols = 1 << (stacked_num_variables - log_rows);
@@ -347,8 +358,17 @@ fn build_pcs(log_height: usize, width: usize) -> CodePcs {
     let code = ReedSolomonCode::new(cols, LIGERO_RATE * cols);
 
     #[cfg(not(feature = "ligero"))]
-    // Distance-derived (provable δ/3 by default), clamped to the codeword length.
-    let num_queries = core::cmp::min(bd_t, code.codeword_len());
+    // Distance-derived (provable δ/3 by default). The chosen split MUST supply enough columns for
+    // the full query count — never silently clamp to fewer queries, which would prove insecurely.
+    let num_queries = {
+        assert!(
+            code.codeword_len() >= bd_t,
+            "Brakedown split (cols={cols}) has codeword {} < the {bd_t} queries needed for {security_bits}-bit \
+             security — insecure; increase the trace size or pick a higher-δ preset",
+            code.codeword_len(),
+        );
+        bd_t
+    };
     #[cfg(feature = "ligero")]
     // Security-derived: t = ⌈λ / −log₂(1 − δ)⌉, clamped to the codeword length.
     let num_queries = core::cmp::min(
@@ -424,8 +444,21 @@ pub fn config_for_eddsa(
     main_width: usize,
     preprocessed_width: usize,
 ) -> EdDsaConfig {
+    config_for_eddsa_with_security(log_height, main_width, preprocessed_width, TARGET_SECURITY_BITS)
+}
+
+/// As [`config_for_eddsa`], but with an explicit Brakedown soundness target. Production uses
+/// [`TARGET_SECURITY_BITS`]; small traces (e.g. tests) may need a lower target, since secure
+/// Brakedown at 100 bits requires enough columns to open `t` queries — a large `N`. Passing a
+/// target the trace cannot support makes `build_pcs` panic rather than prove insecurely.
+pub fn config_for_eddsa_with_security(
+    log_height: usize,
+    main_width: usize,
+    preprocessed_width: usize,
+    security_bits: usize,
+) -> EdDsaConfig {
     EdDsaConfig {
-        main_pcs: build_pcs(log_height, main_width),
-        preprocessed_pcs: build_pcs(log_height, preprocessed_width),
+        main_pcs: build_pcs(log_height, main_width, security_bits),
+        preprocessed_pcs: build_pcs(log_height, preprocessed_width, security_bits),
     }
 }

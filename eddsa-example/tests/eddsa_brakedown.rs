@@ -1,7 +1,7 @@
 //! End-to-end tests: the ed25519 `EdDsaAir` proved with the Brakedown multi-stark
 //! prover over the native base field. Small `num_bits` keeps the trace tiny.
 
-use eddsa_example::config::{F, challenger, config_for_eddsa};
+use eddsa_example::config::{F, challenger, config_for_eddsa_with_security};
 use eddsa_example::curve::{base_b, d, subgroup_order, valid_instance};
 use p3_ed25519_air::eddsa::{
     EdDsaAir, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS, generate_trace_rows, public_values,
@@ -15,6 +15,12 @@ use p3_sumcheck::layout::Table;
 use p3_util::log2_ceil_usize;
 
 const NUM_BITS: usize = 32;
+
+/// This end-to-end test intentionally uses a tiny trace (fast). Its smallest committed poly is the
+/// preprocessed one at ~2^10, where secure Brakedown at 100 bits is impossible (a 2^10 poly can open
+/// at most ~1.7k columns, and 100-bit needs ≥2936). We therefore target a soundness level the trace
+/// can honestly reach; `build_pcs` now *panics* rather than silently clamp to an insecure query count.
+const TEST_SECURITY_BITS: usize = 40;
 
 /// Build (config, air, trace, public values, log_height) for a valid instance.
 fn fixture() -> (
@@ -31,7 +37,12 @@ fn fixture() -> (
     let air = EdDsaAir { d, base_b, num_bits: NUM_BITS, log_instances: 0 };
     let trace = generate_trace_rows(d, base_b, &l, inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let pis = public_values(inst.a, inst.r, &inst.s_bits, &inst.k_bits);
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa_with_security(
+        log_height,
+        NUM_EDDSA_COLS,
+        NUM_EDDSA_PREPROCESSED_COLS,
+        TEST_SECURITY_BITS,
+    );
     (config, air, Table::new(trace.transpose()), pis, log_height)
 }
 
