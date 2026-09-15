@@ -49,6 +49,7 @@ fn fixture() -> (
     let trace = generate_trace_rows(d, base_b, &l, inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let pis = public_values(inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let config = config_for_eddsa_with_security(
+        NUM_BITS,
         log_height,
         NUM_EDDSA_COLS,
         NUM_EDDSA_PREPROCESSED_COLS,
@@ -133,6 +134,7 @@ fn eddsa_batched_roundtrips_and_rejects_a_corrupt_instance() {
     let pis = public_values(first.a, first.r, &first.s_bits, &first.k_bits);
     let log_height = log2_ceil_usize(trace_height(NUM_BITS) * NUM_SIGS);
     let config = config_for_eddsa_with_security(
+        NUM_BITS,
         log_height,
         NUM_EDDSA_COLS,
         NUM_EDDSA_PREPROCESSED_COLS,

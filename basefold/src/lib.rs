@@ -15,6 +15,7 @@ mod grinding;
 
 mod foldable_code;
 mod merkle_pcs;
+pub mod query_recorder;
 mod pcs;
 mod prescribed_pcs;
 

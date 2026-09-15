@@ -78,6 +78,16 @@ where
     A: BaseAir<C::Val>,
     Commitment<C>: Clone,
 {
+    // The verifier evaluates these itself, so there is nothing to commit: no
+    // preprocessed commitment in the key, no opening in the proof, and no
+    // preprocessed bytes on the wire.
+    if config.evaluates_preprocessed_directly() {
+        return (
+            ProvingKey { preprocessed: None },
+            VerifyingKey { preprocessed: None },
+        );
+    }
+
     let mut tables = Vec::new();
 
     for air in airs.iter().filter(|air| air.preprocessed_width() != 0) {

@@ -66,7 +66,7 @@ fn main() {
     );
     let pis: Vec<F> = public_values(instance.a, instance.r, &instance.s_bits, &instance.k_bits);
 
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa(num_bits, log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
 
     // Setup commits the (witness-independent) preprocessed trace once.
     let (pk, vk) = setup(&config, &[&air], &mut challenger());

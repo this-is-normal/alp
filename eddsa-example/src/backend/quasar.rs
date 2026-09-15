@@ -110,6 +110,87 @@ fn choose_params(log_height: usize, width: usize) -> QuasarParams {
 /// Build one Quasar PCS sized for a `2^log_height`-row, `width`-column trace.
 /// Quasar derives its column and inner-Basefold query counts from `SECURITY_BITS`
 /// and `POW_BITS` below, so a caller-supplied target is unused here.
+/// The inverses of the foldable-code twists at `indices`, for a host to ship to
+/// a recursion guest.
+///
+/// The guest needs `1/t` at every position its queries land on. It cannot
+/// derive them cheaply — a field inversion is ~14,879 instructions in-guest and
+/// **77.9 % of the cost of deriving a position** (measured 2026-09-11) — and
+/// baking them costs ~43 MB of `.vmexe`, charged on every `prove app`.
+///
+/// Shipping them instead is safe because an inverse is *checkable*: the guest
+/// verifies `t · hint == 1` in one multiply, against a `t` it still gets from a
+/// trusted source (the baked table, or derivation). A hinted `t` would **not**
+/// be safe — `t` defines which code is being verified against, and validating
+/// it would mean re-deriving it, which is the cost being avoided.
+///
+/// Inverted in one batch: Montgomery's trick is one inversion plus ~3n
+/// multiplications, against n inversions of 252 squarings and 77 multiplies each.
+#[must_use]
+pub fn twist_inverse_hints(indices: &[usize]) -> (Vec<u32>, Vec<F>) {
+    let twists: Vec<F> = indices
+        .iter()
+        .map(|&i| p3_basefold::sample_nonzero_at::<F>(BF_CODE_SEED, i))
+        .collect();
+    let inverses = p3_field::batch_multiplicative_inverse(&twists);
+    (indices.iter().map(|&i| i as u32).collect(), inverses)
+}
+
+/// Commit to the foldable-code twist table and open it at `indices`.
+///
+/// Strategy M. Unlike an inverse, a twist is **not** checkable in one multiply —
+/// it selects which code is being verified against — so the only way a guest can
+/// accept one from the host is against a commitment in its own program image.
+/// That buys the removal of the whole table: ~86 MB of `.vmexe`, charged on
+/// every `prove app`.
+///
+/// The opening is **pruned**: thousands of indices into one tree share almost
+/// all of their ancestors, so the frontier is sent once rather than a path each.
+///
+/// Returns `(indices, leaves, pruned paths, log2 leaves, depth)`.
+#[must_use]
+pub fn twist_merkle_payload(
+    log_cols: usize,
+    indices: &[usize],
+) -> (
+    Vec<u32>,
+    Vec<F>,
+    p3_merkle_tree::PrunedMerklePaths<p3_baby_bear::BabyBear, 8>,
+    usize,
+    usize,
+) {
+    use p3_commit::Mmcs;
+    use p3_matrix::dense::RowMajorMatrix;
+
+    let n = BF_INV_RATE << log_cols;
+    let leaves: Vec<F> = (0..n)
+        .map(|i| p3_basefold::sample_nonzero_at::<F>(BF_CODE_SEED, i))
+        .collect();
+
+    // `g0` occupies indices `0..inv_rate` and is read by the code's
+    // *constructor*, not through `diag_at` — so the query recorder never sees
+    // it, and a payload built from recorded indices alone would omit it. The
+    // guest then asks for index 0 and finds nothing. Union it in explicitly.
+    let mut all: Vec<usize> = (0..BF_INV_RATE).chain(indices.iter().copied()).collect();
+    all.sort_unstable();
+    all.dedup();
+
+    let mmcs = build_mmcs();
+    let (_root, data) = mmcs.commit(vec![RowMajorMatrix::new(leaves, 1)]);
+    let (values, proof) = mmcs.open_multi_batch(&all, &data);
+
+    // One column, so each opened row is a single element.
+    let opened: Vec<F> = values.iter().map(|per_matrix| per_matrix[0][0]).collect();
+    let depth = p3_util::log2_ceil_usize(n);
+    (
+        all.iter().map(|&i| i as u32).collect(),
+        opened,
+        proof,
+        log2_ceil_usize(n),
+        depth,
+    )
+}
+
 pub fn build_pcs(log_height: usize, width: usize, _security_bits: usize) -> CodePcs {
     let params = choose_params(log_height, width);
     let bf_queries = basefold_queries();

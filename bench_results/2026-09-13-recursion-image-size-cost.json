@@ -1,0 +1,31 @@
+{
+  "date": "2026-09-13",
+  "layer": "recursion",
+  "target": "OpenVM program-image size vs prove-app wall-clock",
+  "headline": "image costs ~0.04 s/MB, not the documented 0.25 s/MB (~6x overstated)",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true",
+  "hardware": { "cpu": "AMD EPYC 7B12", "cpu_quota_cores": 30.72, "gpu": "RTX 5090 32 GB" },
+  "toolchain": { "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "measured": true,
+  "isolation": "both arms read the same hint blobs and execute the same instructions; app proofs are byte-identical. Only the unused 43 MB TINV_WORDS table differs.",
+  "rows": [
+    { "signatures": 32,   "small_vmexe": 50089128, "small_s": 23, "large_vmexe": 93080472, "large_s": 25, "delta_s": 2, "app_proof_bytes": 5600566 },
+    { "signatures": 128,  "small_vmexe": 50089128, "small_s": 24, "large_vmexe": 93080472, "large_s": 26, "delta_s": 2, "app_proof_bytes": 6878914 },
+    { "signatures": 256,  "small_vmexe": 50089128, "small_s": 29, "large_vmexe": 93080472, "large_s": 31, "delta_s": 2, "app_proof_bytes": 7983494 },
+    { "signatures": 1024, "small_vmexe": 50089128, "small_s": 27, "large_vmexe": 93080472, "large_s": 28, "delta_s": 1, "app_proof_bytes": 9391572 }
+  ],
+  "image_bytes_delta": 42991344,
+  "cost_s_per_mb": 0.04,
+  "corrects": {
+    "documented": "0.25 s/MB (alp-openvm/MANIFEST.md, OPTIMIZATIONS.md): '92 MB vmexe costs ~16 s more than 27.7 MB'",
+    "suspected_cause": "measured with the build/keygen path included, which is worth ~18 s on its own (see 2026-09-11-recursion-quasar-direct-preprocessed)",
+    "consequences": [
+      "strategy D's image saving is worth ~2 s, not ~10 s; its real value is -17 M instructions at 1024 sigs",
+      "MAX_LOG_COLS=18 (~179 MB) would cost ~3.4 s, not ~21 s — still the worst lever, but on instruction grounds not timing",
+      "strategy M's ~86 MB image saving is worth ~3.4 s against a 38% larger blob"
+    ]
+  },
+  "comparable_to": [],
+  "not_comparable_to": [ { "run": "any prove app wall-clock before 2026-09-11", "reason": "measured with the build path in the loop" } ]
+}

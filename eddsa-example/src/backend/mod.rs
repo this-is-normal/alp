@@ -30,7 +30,9 @@ pub use basefold::{CodePcs, NAME, build_pcs};
 #[cfg(all(not(feature = "basefold"), not(feature = "quasar"), feature = "ligero"))]
 pub use ligero::{CodePcs, NAME, build_pcs};
 #[cfg(feature = "quasar")]
-pub use quasar::{CodePcs, NAME, build_pcs, resolved_params};
+pub use quasar::{
+    CodePcs, NAME, build_pcs, resolved_params, twist_inverse_hints, twist_merkle_payload,
+};
 #[cfg(all(
     not(feature = "basefold"),
     not(feature = "quasar"),

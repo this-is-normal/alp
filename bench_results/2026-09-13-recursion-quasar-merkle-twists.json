@@ -1,0 +1,40 @@
+{
+  "date": "2026-09-13",
+  "layer": "recursion",
+  "target": "Quasar guest, Merkle-committed twist table (strategy M)",
+  "headline": "image 93 MB -> 7.15 MB (13x), but +23% instructions and +5 segments vs C+D",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true",
+  "hardware": { "cpu": "AMD EPYC 7B12", "cpu_quota_cores": 30.72, "gpu": "RTX 5090 32 GB", "cuda": "13.1" },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "parameters": {
+    "num_bits": 253, "bf_inv_rate": 4, "pow_bits": 16, "merkle_cap_height": 0,
+    "max_root_log_cols": 20, "vmexe_bytes": 7153272,
+    "features_guest": "merkle-twists,hint-inverses",
+    "features_host": "quasar,bb-hash,parallel,record-queries + MERKLE_TWISTS=1",
+    "build_rs_seconds": 811
+  },
+  "measured": true,
+  "rows": [
+    { "signatures": 32,   "instructions": 86424091,  "segments": 9,  "cells": null,       "blob_bytes": 2011843, "leaves": 3489, "tree_log2_leaves": 16, "height": 16, "pruned_siblings": 8592,  "path_bytes": 274944, "unpruned_siblings": 55824,  "pruning_gain": 6.5 },
+    { "signatures": 64,   "instructions": 94918684,  "segments": 10, "cells": 3741012958, "blob_bytes": 2297675, "leaves": 3893, "tree_log2_leaves": 17, "height": 17, "pruned_siblings": 11461, "path_bytes": 366752, "unpruned_siblings": 66181,  "pruning_gain": 5.8 },
+    { "signatures": 128,  "instructions": 105508607, "segments": 11, "cells": 4154175721, "blob_bytes": 2649179, "leaves": 4419, "tree_log2_leaves": 18, "height": 18, "pruned_siblings": 15294, "path_bytes": 489408, "unpruned_siblings": 79542,  "pruning_gain": 5.2 },
+    { "signatures": 256,  "instructions": 115900587, "segments": 13, "cells": 4556589626, "blob_bytes": 3051479, "leaves": 4409, "tree_log2_leaves": 18, "height": 18, "pruned_siblings": 15122, "path_bytes": 483904, "unpruned_siblings": 79362,  "pruning_gain": 5.2 },
+    { "signatures": 512,  "instructions": 126322449, "segments": 15, "cells": 4963285519, "blob_bytes": 3407615, "leaves": 4929, "tree_log2_leaves": 19, "height": 19, "pruned_siblings": 19032, "path_bytes": 609024, "unpruned_siblings": 93651,  "pruning_gain": 4.9 },
+    { "signatures": 1024, "instructions": 137796349, "segments": 17, "cells": 5411723571, "blob_bytes": 3814991, "leaves": 5405, "tree_log2_leaves": 20, "height": 20, "pruned_siblings": 23515, "path_bytes": 752480, "unpruned_siblings": 108100, "pruning_gain": 4.6 }
+  ],
+  "findings": [
+    "tree height tracks log_cols, not signature count: 128 and 256 share height 18",
+    "pruning gain erodes with tree height (6.5x at 16 -> 4.6x at 20): leaves grow 1.5x while the tree grows 16x, so queries share fewer ancestors",
+    "build.rs cost moves from image to build time: 811 s to sample ~8.4 M elements and build 21 trees, single-threaded",
+    "blob grows 38-45%, erased later by aggregation (root proof is a constant 534,636 B)"
+  ],
+  "vs_c_plus_d_at_256": { "image_delta_mb": -43, "instructions_delta": 21684655, "instructions_pct": 23, "segments_delta": 3, "blob_delta_bytes": 660277 },
+  "vs_c_plus_d_at_1024": { "instructions_delta": 23629095, "instructions_pct": 21, "segments_delta": 5 },
+  "comparable_to": [ { "run": "2026-09-13-recursion-quasar-hybrid-table", "reason": "same box, commit, sizes and invocation" } ],
+  "not_comparable_to": [ { "run": "the first M attempt on 2026-09-13", "reason": "blobs predated the g0 fix and the roots array was sized by MAX_LOG_COLS; both crashed, no numbers taken" } ],
+  "tried_and_rejected": [
+    { "change": "sizing TWIST_ROOTS by MAX_LOG_COLS", "result": "guest panic: len is 17 but the index is 18", "why": "1024 sigs need log_cols 18; roots are 32 B each and must be sized independently of the table" },
+    { "change": "building the payload from recorded indices alone", "result": "guest panic: must ship a twist for every queried index: 0", "why": "g0 (0..inv_rate) is read by the code constructor, not through diag_at, so the recorder never sees it" }
+  ]
+}

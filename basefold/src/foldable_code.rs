@@ -243,10 +243,14 @@ impl<F: Field> RandomFoldableCode<F> {
     /// `1/t_level[j]`: an array read when the code is materialised, one
     /// sample-and-invert when it is lazy.
     fn tinv_at(&self, level: usize, j: usize) -> F {
+        let idx = level_base(self.inv_rate, level) + j;
+        // Recorded before the branch, so a host running with a *materialised*
+        // code still learns which indices a lazy verifier would need. Compiles
+        // to nothing without `record-queries`.
+        crate::query_recorder::record(idx);
         if let Some(tinv) = &self.tinv {
             return tinv[level][j];
         }
-        let idx = level_base(self.inv_rate, level) + j;
         if let Some(sample_inv) = self.sample_inv {
             return sample_inv(self.seed, idx);
         }
@@ -370,9 +374,11 @@ impl<F: Field> FoldableCode<F> for RandomFoldableCode<F> {
     }
 
     fn diag_at(&self, level: usize, j: usize) -> F {
+        let idx = level_base(self.inv_rate, level) + j;
+        crate::query_recorder::record(idx);
         match (&self.twist, self.sample) {
             (Some(twist), _) => twist[level][j],
-            (None, Some(sample)) => sample(self.seed, level_base(self.inv_rate, level) + j),
+            (None, Some(sample)) => sample(self.seed, idx),
             (None, None) => unreachable!("a code has either its twists or a sampler"),
         }
     }

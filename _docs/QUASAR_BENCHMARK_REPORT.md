@@ -1,6 +1,11 @@
 # Quasar PCS — end-to-end benchmark report
 
 Batched ed25519 signature verification (1 → 256 signatures in one proof) over the native ed25519
+
+> **Individual benchmark runs now live in [`bench_results/`](bench_results/)**, one record per run
+> with full provenance and an explicit comparability statement; the clustered change log is
+> [`OPTIMIZATIONS.md`](OPTIMIZATIONS.md). This document is the narrative arc.
+
 base field, proved four ways: **Brakedown**, **Ligero**, **BaseFold**, and **Quasar**
 ([eprint 2026/1839](https://eprint.iacr.org/2026/1839)).
 

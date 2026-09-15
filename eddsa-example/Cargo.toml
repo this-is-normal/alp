@@ -16,6 +16,7 @@ p3-qa-code.workspace = true
 p3-quasar.workspace = true
 p3-basefold.workspace = true
 p3-challenger.workspace = true
+p3-commit.workspace = true
 p3-ed25519.workspace = true
 p3-ed25519-air.workspace = true
 p3-field.workspace = true
@@ -63,10 +64,22 @@ quasar = []
 # the recursion/guest operating point; the default keeps the pure-ed25519 hash for host comparison.
 bb-hash = ["dep:p3-baby-bear"]
 count-ops = ["p3-ed25519/count-ops", "p3-field/count-ops", "p3-merkle-tree/count-ops", "p3-quasar/count-ops"]
+# INSTRUMENTATION: record which foldable-code indices a verifier reads, so a
+# recursion host can ship exactly those (see `count_queries`). Host-only.
+record-queries = ["p3-basefold/record-queries"]
 # COST ABLATION ONLY (see p3-multi-stark).
 ablate-zerocheck-only = ["p3-multi-stark/ablate-zerocheck-only"]
+ablate-before-closing = ["p3-multi-stark/ablate-before-closing"]
 ablate-after-sumcheck = ["p3-basefold/ablate-after-sumcheck"]
 ablate-after-merkle = ["p3-basefold/ablate-after-merkle"]
+# Quasar's own cut points, so `count_verify_bf` can attribute OPERATION COUNTS
+# per phase instead of only over the whole verify. Without these the counters
+# are global and cannot say whether an opening is field work or plumbing.
+ablate-after-columns = ["p3-quasar/ablate-after-columns"]
+ablate-after-encoding = ["p3-quasar/ablate-after-encoding"]
+ablate-after-reduction = ["p3-quasar/ablate-after-reduction"]
+ablate-after-online-opening = ["p3-quasar/ablate-after-online-opening"]
+ablate-after-both-openings = ["p3-quasar/ablate-after-both-openings"]
 
 [lints]
 workspace = true

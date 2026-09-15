@@ -1,0 +1,197 @@
+{
+  "date": "2026-09-13",
+  "layer": "recursion",
+  "target": "Quasar guest: twist-table strategies C / C+D / M",
+  "headline": "C+D wins; Merkle gives a 13x smaller image (7.15 MB) but +23% instructions and +5 segments",
+  "host": "vultr4",
+  "commit": "70cb077d",
+  "branch": "quazar2",
+  "dirty": "true",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12",
+    "cpu_quota_cores": 30.72,
+    "gpu": "RTX 5090 32 GB",
+    "cuda": "13.1"
+  },
+  "toolchain": {
+    "rustc": "1.98.1",
+    "cargo_openvm": "v2.0.2 (59a69b8) [cuda]"
+  },
+  "measured": true,
+  "images": {
+    "C": 93106878,
+    "C+D": 50115207,
+    "M": 7153272
+  },
+  "instructions": [
+    {
+      "signatures": 32,
+      "C": 67522115,
+      "CD": 71751216,
+      "M": 86424091,
+      "segments": {
+        "C": 7,
+        "CD": 7,
+        "M": 9
+      }
+    },
+    {
+      "signatures": 64,
+      "C": 72609342,
+      "CD": 77202200,
+      "M": 94918684,
+      "segments": {
+        "C": 7,
+        "CD": 8,
+        "M": 10
+      }
+    },
+    {
+      "signatures": 128,
+      "C": 78610104,
+      "CD": 83679713,
+      "M": 105508607,
+      "segments": {
+        "C": 8,
+        "CD": 9,
+        "M": 11
+      }
+    },
+    {
+      "signatures": 256,
+      "C": 89116798,
+      "CD": 94215932,
+      "M": 115900587,
+      "segments": {
+        "C": 9,
+        "CD": 10,
+        "M": 13
+      }
+    },
+    {
+      "signatures": 512,
+      "C": 109809029,
+      "CD": 103825476,
+      "M": 126322449,
+      "segments": {
+        "C": 11,
+        "CD": 10,
+        "M": 15
+      }
+    },
+    {
+      "signatures": 1024,
+      "C": 131247719,
+      "CD": 114167254,
+      "M": 137796349,
+      "segments": {
+        "C": 12,
+        "CD": 12,
+        "M": 17
+      }
+    }
+  ],
+  "cells": [
+    {
+      "signatures": 64,
+      "C": 2881612925,
+      "CD": 3055564714,
+      "M": 3741012958
+    },
+    {
+      "signatures": 256,
+      "C": 3523137015,
+      "CD": 3716554512,
+      "M": 4556589626
+    },
+    {
+      "signatures": 512,
+      "C": 4389673359,
+      "CD": 4097893138,
+      "M": 4963285519
+    },
+    {
+      "signatures": 1024,
+      "C": 5285770738,
+      "CD": 4508280555,
+      "M": 5411723571
+    }
+  ],
+  "prove_app": [
+    {
+      "signatures": 32,
+      "C_s": 25,
+      "C_proof": 5537700,
+      "CD_s": 23,
+      "CD_proof": 5600566,
+      "M_s": 24,
+      "M_proof": 6940754
+    },
+    {
+      "signatures": 128,
+      "C_s": 26,
+      "C_proof": 6583535,
+      "CD_s": 24,
+      "CD_proof": 6878914,
+      "M_s": 30,
+      "M_proof": 8812288
+    },
+    {
+      "signatures": 256,
+      "C_s": 28,
+      "C_proof": 7040789,
+      "CD_s": 29,
+      "CD_proof": 7860935,
+      "M_s": 27,
+      "M_proof": 9472897
+    },
+    {
+      "signatures": 1024,
+      "C_s": 38,
+      "C_proof": 10723886,
+      "CD_s": 29,
+      "CD_proof": 9391572,
+      "M_s": 30,
+      "M_proof": 11742583
+    }
+  ],
+  "blob_bytes": [
+    {
+      "signatures": 32,
+      "C": 1457927,
+      "CD": 1597327,
+      "M": 2011843
+    },
+    {
+      "signatures": 256,
+      "C": 2215003,
+      "CD": 2391203,
+      "M": 3051479
+    },
+    {
+      "signatures": 1024,
+      "C": 2630259,
+      "CD": 2846299,
+      "M": 3814991
+    }
+  ],
+  "verdict": "C+D: best instructions and cells above 256, 9 s faster prove app at 1024, smaller app proof, half C's image, +8% blob. M only when image size is a hard constraint.",
+  "key_correction": "with the documented 0.25 s/MB image cost, M's 43 MB would have read as ~11 s instead of the measured ~1.7 s, and M would have looked like the winner",
+  "wall_clock_noise_s": 2,
+  "comparable_to": [
+    {
+      "run": "all three columns",
+      "reason": "same box, commit, sizes, invocation and session; blobs regenerated in the current format"
+    }
+  ],
+  "not_comparable_to": [
+    {
+      "run": "any prove app before 2026-09-11",
+      "reason": "build path included, ~18 s"
+    },
+    {
+      "run": "the first M attempt",
+      "reason": "crashed on the g0 and roots-array bugs; no numbers taken"
+    }
+  ]
+}

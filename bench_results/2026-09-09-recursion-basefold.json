@@ -1,0 +1,29 @@
+{
+  "date": "2026-09-09",
+  "layer": "recursion",
+  "target": "BaseFold guest (OpenVM)",
+  "headline": "168.8 M instr @ 16 sigs; 0.227 s/sig @ 256",
+  "host": "vultr4",
+  "commit": "pre-f60a208f working tree", "branch": "quazar2", "dirty": "true (~25 files)",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12", "cores_visible": 256, "cpu_quota_cores": 30.72,
+    "memory_gb": 503, "gpu": "RTX 5090 32 GB", "driver": "580.159.03", "cuda": "13.1"
+  },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "parameters": {
+    "num_bits": 253, "inv_rate": 16, "radius": 0.350, "queries": 136, "pow_bits": 16,
+    "lazy_foldable_code": true, "segment_max_memory_gib": 26,
+    "features_host": "basefold,bb-hash,parallel",
+    "chips_guest": ["rv32i", "rv32m", "io", "modular", "poseidon2"]
+  },
+  "measured": true,
+  "rows": [
+    { "signatures": 1,   "instructions": 122800769, "segments": 11, "prove_app_s": 36, "app_proof_bytes": 8679972 },
+    { "signatures": 16,  "instructions": 168826803, "segments": 15, "prove_app_s": 50, "app_proof_bytes": 12294190 },
+    { "signatures": 256, "instructions": 219601831, "segments": 19, "prove_app_s": 58, "app_proof_bytes": 15720081 }
+  ],
+  "comparable_to": [],
+  "not_comparable_to": [
+    { "run": "2026-09-10-recursion-quasar-flat", "reason": "predates the flat serde format, the ed25519 alignment fix and the baked parameter tables" }
+  ]
+}

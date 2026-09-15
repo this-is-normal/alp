@@ -6,6 +6,7 @@ use alloc::vec::Vec;
 use num_bigint::BigUint;
 use p3_field::Field;
 use p3_matrix::dense::RowMajorMatrix;
+use p3_util::log2_strict_usize;
 
 use crate::add::{Point, add_points};
 use crate::eddsa::columns::{
@@ -138,20 +139,16 @@ pub fn generate_preprocessed_trace_batch<F: Field>(
 ) -> RowMajorMatrix<F> {
     assert!(num_instances >= 1, "need at least one instance");
     let h = trace_height(num_bits);
-    let height = h * num_instances;
-    let mut trace_values = F::zero_vec(height * NUM_EDDSA_PREPROCESSED_COLS);
+    let width = NUM_EDDSA_PREPROCESSED_COLS;
+    let mut trace_values = F::zero_vec(h * num_instances * width);
 
+    // Build ONE instance, then copy it. Every row depends only on `row % h` —
+    // the doubling chain restarts at each instance — so the tail is a memcpy
+    // rather than `num_instances` more runs of the fixed-base ladder. That
+    // matters because the prover regenerates this per proof when the verifier
+    // evaluates the preprocessed trace instead of opening a commitment to it.
     let (mut x_dbl, mut y_dbl) = base_b;
-    for (row, chunk) in trace_values
-        .chunks_mut(NUM_EDDSA_PREPROCESSED_COLS)
-        .enumerate()
-    {
-        let local = row % h;
-        // Restart the fixed-base doubling chain at the start of each stacked instance.
-        if local == 0 {
-            (x_dbl, y_dbl) = base_b;
-        }
-
+    for (local, chunk) in trace_values[..h * width].chunks_mut(width).enumerate() {
         let cols: &mut EdDsaPreprocessedCols<F> = chunk.borrow_mut();
         let is_ladder = local < num_bits;
 
@@ -170,16 +167,20 @@ pub fn generate_preprocessed_trace_batch<F: Field>(
             dbl_y,
             is_ladder: F::from_bool(is_ladder),
             is_ladder_step: F::from_bool(local + 1 < num_bits),
-            is_ladder_last: F::from_bool(local == num_bits - 1),
+            is_ladder_last: F::from_bool(local + 1 == num_bits),
             is_sgc_a: F::from_bool(local == sgc_a_row(num_bits)),
             is_sgc_r: F::from_bool(local == sgc_r_row(num_bits)),
-            is_add: F::from_bool(local == add_row(num_bits)),
+            is_add: F::from_bool(local == num_bits + 2),
             is_instance_first: F::from_bool(local == 0),
-            is_instance_last: F::from_bool(local == h - 1),
+            is_instance_last: F::from_bool(local + 1 == h),
         };
     }
+    for i in 1..num_instances {
+        let (head, tail) = trace_values.split_at_mut(i * h * width);
+        tail[..h * width].copy_from_slice(&head[..h * width]);
+    }
 
-    RowMajorMatrix::new(trace_values, NUM_EDDSA_PREPROCESSED_COLS)
+    RowMajorMatrix::new(trace_values, width)
 }
 
 /// Generates the main trace proving non-cofactored verification of `(R, s)` under public key `A`
@@ -343,4 +344,86 @@ pub fn ladder_results<F: Field>(
         (cols.fixed.result_x, cols.fixed.result_y),
         (cols.var.result_x, cols.var.result_y),
     )
+}
+
+/// Current- and next-row evaluations of every preprocessed column at `point`,
+/// **without** committing to the preprocessed trace.
+///
+/// The preprocessed trace is a tiling: `generate_preprocessed_trace_batch`
+/// repeats one `h = trace_height(num_bits)` row pattern once per instance, and
+/// `trace_height` is a power of two, so a row index splits cleanly into
+/// `(instance, local)` with no padding. Its multilinear extension therefore
+/// collapses — writing `point` as `z_hi ‖ z_lo` with `z_lo` the low
+/// `log₂ h` coordinates (MSB-first, so the *trailing* ones):
+///
+/// ```text
+///   MLE_T(z_hi ‖ z_lo) = Σ_i eq(z_hi, i) · Σ_l eq(z_lo, l) · P[l]
+///                      = 1 · MLE_P(z_lo)
+/// ```
+///
+/// because `Σ_i eq(z_hi, i) = 1` identically. The same holds for the rotated
+/// ("next") view, since a global rotation of a tiling is the tiling of the
+/// rotated pattern.
+///
+/// So the work is `O(h · width)` — **independent of the batch size** — against
+/// a committed polynomial that grows with it (2^16 evaluations at 16
+/// signatures, 2^22 at 1024). The verifier evaluates public, AIR-fixed data
+/// itself instead of trusting an opening, which is strictly the stronger
+/// position.
+///
+/// # Arguments
+///
+/// `point` is the bound point restricted to this table, `log₂(h · instances)`
+/// coordinates, most significant first.
+///
+/// # Panics
+///
+/// If `point` is shorter than `log₂ h`.
+#[must_use]
+pub fn preprocessed_evals_at<F: Field>(
+    d: F,
+    base_b: Point<F>,
+    num_bits: usize,
+    point: &[F],
+) -> (Vec<F>, Vec<F>) {
+    let h = trace_height(num_bits);
+    let log_h = log2_strict_usize(h);
+    assert!(
+        point.len() >= log_h,
+        "point has {} coordinates, need at least {log_h}",
+        point.len()
+    );
+    // Only the low coordinates survive the collapse.
+    let z_lo = &point[point.len() - log_h..];
+
+    let pattern = generate_preprocessed_trace_batch(d, base_b, num_bits, 1);
+    let width = NUM_EDDSA_PREPROCESSED_COLS;
+
+    // eq(z_lo, ·) over the pattern's rows, MSB-first.
+    let mut eq = vec![F::ONE];
+    for &z in z_lo {
+        let mut next = Vec::with_capacity(eq.len() * 2);
+        for &e in &eq {
+            next.push(e * (F::ONE - z));
+            next.push(e * z);
+        }
+        eq = next;
+    }
+    debug_assert_eq!(eq.len(), h);
+
+    let mut current = F::zero_vec(width);
+    let mut next = F::zero_vec(width);
+    for row in 0..h {
+        let weight = eq[row];
+        let cur_row = &pattern.values[row * width..(row + 1) * width];
+        // The rotated pattern: row `h - 1` wraps to row 0, which is also what a
+        // global rotation of the tiled trace produces at an instance seam.
+        let nxt = (row + 1) % h;
+        let nxt_row = &pattern.values[nxt * width..(nxt + 1) * width];
+        for c in 0..width {
+            current[c] += weight * cur_row[c];
+            next[c] += weight * nxt_row[c];
+        }
+    }
+    (current, next)
 }

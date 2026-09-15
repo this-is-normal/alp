@@ -31,13 +31,24 @@ use p3_util::log2_ceil_usize;
 /// precompiles). These are what turn op counts into a time attribution.
 #[cfg(feature = "count-ops")]
 mod guest_cost {
-    pub const PERM: u64 = 16;
-    pub const MUL: u64 = 186;
-    pub const SQ: u64 = 186;
+    /// One Poseidon2-BabyBear permutation as the guest actually pays for it:
+    /// the bare chip call is 16, but the wrapped permutation is ~80 even after
+    /// `MontyBypass` removed the per-lane conversion (549 -> ~80).
+    pub const PERM: u64 = 80;
+    /// **Updated 2026-09-13.** These were 186/186, which predate the
+    /// `repr(C, align(32))` fix on `Ed25519`: matching the modular precompile's
+    /// alignment took multiply 178 -> 66 and square 186 -> 34.
+    pub const MUL: u64 = 66;
+    pub const SQ: u64 = 34;
     pub const ADD: u64 = 55;
     /// Measured, not modelled: 14,879, well under the 252·SQ + 77·MUL a Fermat
     /// inversion would cost, because the guest routes it through OpenVM's
     /// modular precompile rather than exponentiating.
+    ///
+    /// NOTE: this number does not reconcile with the 2026-09-11 ablation, which
+    /// attributed 183.9 M instructions to inversion against only 7,712 recorded
+    /// code reads — implying ~23,800 each. Treat the inversion row as the least
+    /// trustworthy in this table.
     pub const INV: u64 = 14_879;
     pub const SPLIT: u64 = 222;
     /// One query-path through the **pruned** batch verifier — what the
@@ -63,7 +74,7 @@ fn main() {
     let first = &instances[0];
     let pis = public_values(first.a, first.r, &first.s_bits, &first.k_bits);
     let log_height = log2_ceil_usize(trace_height(num_bits) * num_signatures);
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa(num_bits, log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
 
     let (pk, vk) = setup(&config, &[&air], &mut challenger());
     let proof = prove(

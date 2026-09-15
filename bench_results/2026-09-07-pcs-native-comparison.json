@@ -1,0 +1,28 @@
+{
+  "date": "2026-09-07",
+  "layer": "pcs",
+  "target": "Quasar vs BaseFold vs Brakedown vs Ligero, native prover",
+  "headline": "Quasar fastest prover: 6.96 s @ 256 sigs, 3.82 MB",
+  "host": "vultr3",
+  "commit": "pre-f60a208f working tree", "branch": "quazar2", "dirty": "true",
+  "hardware": {
+    "cpu": "Intel Xeon E5-2673 v3", "cores_visible": 24, "cpu_quota_cores": 23.04,
+    "memory_gb": 15, "gpu": "RTX 3060 8 GB (unused)", "cuda": null
+  },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": null },
+  "parameters": {
+    "num_bits": 253, "signatures": 256, "hash": "bb-hash (Poseidon2 over BabyBear)",
+    "threads": 24, "pow_bits": 16, "merkle_path_pruning": true, "merkle_cap_height": 0,
+    "features_host": "<backend>,bb-hash,parallel"
+  },
+  "measured": true,
+  "rows": [
+    { "backend": "Quasar",    "setup_s": 3.32, "prove_s": 6.96, "verify_ms": 271,  "proof_bytes": 3820000 },
+    { "backend": "Brakedown", "prove_s": 7.44, "proof_bytes": 12300000 },
+    { "backend": "BaseFold",  "prove_s": 22.3, "proof_bytes": 2500000 }
+  ],
+  "comparable_to": [],
+  "not_comparable_to": [
+    { "run": "any recursion record", "reason": "native host proving on vultr3, not in-circuit verification" }
+  ]
+}

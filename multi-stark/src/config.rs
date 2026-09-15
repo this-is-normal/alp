@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use p3_commit::MultilinearPcs;
 use p3_field::{ExtensionField, Field};
+pub use p3_multilinear_util::point::Point;
 use p3_sumcheck::layout::Table;
 
 /// The wiring a multilinear AIR proof depends on.
@@ -11,6 +12,18 @@ use p3_sumcheck::layout::Table;
 /// One implementation fixes a commitment scheme, a challenge field, and a transcript type.
 ///
 /// The prover and verifier are generic over any implementation.
+/// Current- and next-row evaluations of one table's preprocessed columns.
+///
+/// `next` carries **every** column; the verifier projects it onto the columns
+/// the AIR actually reads a successor of.
+#[derive(Clone, Debug)]
+pub struct PreprocessedEvals<EF> {
+    /// Current-row value of each column, in column order.
+    pub current: Vec<EF>,
+    /// Next-row value of each column, in column order.
+    pub next: Vec<EF>,
+}
+
 pub trait MultiStarkConfig {
     /// Base field the trace and committed columns live in.
     type Val: Field;
@@ -80,6 +93,38 @@ pub trait MultiStarkConfig {
         prover_data: &'a ProverData<Self>,
         table_index: usize,
     ) -> &'a Table<Self::Val>;
+    /// Whether the verifier evaluates the preprocessed traces itself instead of
+    /// opening a commitment to them.
+    ///
+    /// A preprocessed trace is public and fixed by the AIR, so a verifier that
+    /// can evaluate it directly is in a *stronger* position than one trusting
+    /// an opening — and it costs the protocol a commitment, an opening, and the
+    /// proof bytes that carry it. Only worth it when the evaluation is cheap:
+    /// `EdDsaAir`'s preprocessed trace is one 256-row pattern tiled per
+    /// signature, so the work is constant in the batch size while the committed
+    /// polynomial grows with it.
+    ///
+    /// Default `false` — commit and open as usual.
+    fn evaluates_preprocessed_directly(&self) -> bool {
+        false
+    }
+
+    /// Evaluate every preprocessed table at its point, in setup order over the
+    /// AIRs that declare preprocessed columns.
+    ///
+    /// Called only when [`Self::evaluates_preprocessed_directly`] is true; the
+    /// default panics so a config cannot enable the capability without
+    /// supplying it.
+    fn preprocessed_evals_at(
+        &self,
+        _points: &[Point<Self::Challenge>],
+    ) -> Vec<PreprocessedEvals<Self::Challenge>> {
+        unimplemented!(
+            "config enables evaluates_preprocessed_directly but does not implement \
+             preprocessed_evals_at"
+        )
+    }
+
 }
 
 /// Commitment scheme selected by a configuration.

@@ -125,3 +125,35 @@ fn preprocessed_mle_equals_the_single_instance_pattern() {
         );
     }
 }
+
+/// `preprocessed_evals_at` must return exactly what a commitment opening would:
+/// every column's MLE over the **full** trace, current and next, at the bound
+/// point. This is the identity the whole optimisation rests on.
+#[test]
+fn direct_evaluation_matches_the_committed_trace() {
+    use p3_ed25519_air::eddsa::preprocessed_evals_at;
+
+    let (d, base_b) = curve();
+    let h = trace_height(NUM_BITS);
+    let mut rng = ChaCha8Rng::seed_from_u64(0x1DEA);
+
+    for log_instances in 0..5 {
+        let instances = 1 << log_instances;
+        let trace = generate_preprocessed_trace_batch(d, base_b, NUM_BITS, instances);
+        let num_vars = (h * instances).trailing_zeros() as usize;
+        let point: Vec<F> = (0..num_vars).map(|_| rng.random::<F>()).collect();
+
+        let (current, next) = preprocessed_evals_at(d, base_b, NUM_BITS, &point);
+
+        assert_eq!(
+            current,
+            column_evals(&trace, &point),
+            "current-row evaluations wrong at {instances} instances"
+        );
+        assert_eq!(
+            next,
+            column_evals(&rotate(&trace), &point),
+            "next-row evaluations wrong at {instances} instances"
+        );
+    }
+}

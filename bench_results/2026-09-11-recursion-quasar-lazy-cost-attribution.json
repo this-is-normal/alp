@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-11",
+  "layer": "recursion",
+  "target": "Quasar guest, foldable-code derivation cost attribution",
+  "headline": "inversion is 77.9% of the lazy path, sampling 22.1%; 14.76 M instr per derived level",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true (19 files)",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12", "cores_visible": 256, "cpu_quota_cores": 30.72,
+    "memory_gb": 503, "gpu": "RTX 5090 32 GB", "driver": "580.159.03", "cuda": "13.1"
+  },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "parameters": {
+    "num_bits": 253, "signatures": 256, "log_cols": 16,
+    "bf_inv_rate": 4, "pow_bits": 16, "merkle_cap_height": 0, "max_log_cols": 16,
+    "why_256": "at 512/1024 the fallback is all-or-nothing and the two operations cannot be separated; at 256 every index fits the table so each can be forced back on independently"
+  },
+  "measured": true,
+  "variants": [
+    { "variant": "base", "lookups": "table twists + table inverses", "instructions": 89069686, "segments": 9, "vmexe_bytes": 93036034, "reveal": "[1,...]", "note": "reproduces the independent 256-sig measurement exactly: probe scaffolding is cost-neutral" },
+    { "variant": "inv", "lookups": "table twists + derived inverses", "instructions": 272944784, "segments": 26, "vmexe_bytes": 49920250, "reveal": "[1,...]" },
+    { "variant": "both", "lookups": "derived twists + derived inverses", "instructions": 325216364, "segments": 30, "vmexe_bytes": 7025360, "reveal": "[1,...]" }
+  ],
+  "attribution": {
+    "inversion_instructions": 183875098, "inversion_share": 0.779, "inversion_per_level": 11490000,
+    "sampling_instructions": 52271580, "sampling_share": 0.221, "sampling_per_level": 3270000,
+    "total_instructions": 236146678, "total_per_level": 14760000, "levels": 16,
+    "cross_check": "the 512/1024 cliff gave ~14.4 M per level by an unrelated route; agreement within 2.5%"
+  },
+  "fix_projections_modelled": [
+    { "fix": "batch inversion alone", "instructions_1024": 167000000, "speedup": 2.2 },
+    { "fix": "per-index hybrid table fallback alone", "instructions_1024": 140000000, "speedup": 2.6, "recommended": true },
+    { "fix": "both", "instructions_1024": 116000000, "speedup": 3.2 }
+  ],
+  "table_image_cost": {
+    "guest_no_tables_bytes": 7025360,
+    "plus_twists_bytes": 49920250,
+    "plus_twists_and_inverses_bytes": 93036034,
+    "inflation_image_per_data": 5.1,
+    "max_log_cols_18_projection_mb": 350,
+    "note": "confirms by measurement the figure previously extrapolated from a single MAX_LOG_COLS 14->16 point"
+  },
+  "prior_estimates_corrected": [
+    { "claim": "~95% of the fallback cost is inversion", "verdict": "too high" },
+    { "claim": "~69% is inversion", "verdict": "too low; closer, and qualitatively right" },
+    { "measured": "77.9%" }
+  ],
+  "comparable_to": [
+    { "run": "2026-09-11-recursion-quasar-direct-preprocessed", "reason": "same box, commit, parameters and input blob; 'base' is that record's 256-sig row reproduced exactly" }
+  ],
+  "not_comparable_to": [
+    { "run": "any run at a different log_cols", "reason": "per-level totals scale with level count; the per-level column normalises that away" }
+  ],
+  "tried_and_rejected": [
+    { "change": "deriving per-position cost from microbench op costs (6,809 sample / 14,879 inverse)", "result": "inconsistent — implies more inversions than samples, impossible since every inverted position is first sampled", "why": "confirms op-count x microbench-cost is an upper bound, not an estimate" }
+  ]
+}

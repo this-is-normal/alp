@@ -38,6 +38,7 @@ fn fixture() -> (
     let trace = generate_trace_rows(d, base_b, &l, inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let pis = public_values(inst.a, inst.r, &inst.s_bits, &inst.k_bits);
     let config = config_for_eddsa_with_security(
+        NUM_BITS,
         log_height,
         NUM_EDDSA_COLS,
         NUM_EDDSA_PREPROCESSED_COLS,

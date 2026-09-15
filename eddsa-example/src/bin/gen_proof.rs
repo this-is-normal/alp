@@ -17,7 +17,9 @@ use eddsa_example::trace::generate_batch_trace;
 use p3_ed25519_air::eddsa::{
     EdDsaAir, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS, public_values, trace_height,
 };
-use p3_multi_stark::{ProverInstance, ProverInstances, prove, setup};
+use p3_multi_stark::{
+    ProverInstance, ProverInstances, VerifierInstance, VerifierInstances, prove, setup, verify,
+};
 use p3_sumcheck::layout::Table;
 use p3_util::log2_ceil_usize;
 
@@ -47,7 +49,7 @@ fn main() {
     let pis = public_values(first.a, first.r, &first.s_bits, &first.k_bits);
     let log_height = log2_ceil_usize(trace_height(num_bits) * num_signatures);
 
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa(num_bits, log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
     let (pk, vk) = setup(&config, &[&air], &mut challenger());
     let proof = prove(
         &config,
@@ -96,6 +98,84 @@ fn main() {
         eprintln!("  verifying key       {}", n(p3_stark_stats::serialized_size(&vk)));
     }
 
+    // Inverse hints for the recursion guest (strategy D).
+    //
+    // The guest needs `1/twist[idx]` wherever its queries land, but it cannot
+    // know those positions until it runs — and we can, because verification is
+    // deterministic. So: verify once here with the recorder on, harvest the
+    // indices, and ship the inverses. The guest checks each with a single
+    // multiply (`t · hint == 1`), so a wrong hint cannot be accepted.
+    //
+    // Without `record-queries` this is empty and the guest falls back to its
+    // baked `TINV_WORDS` table, so the blob format does not fork.
+    #[cfg(all(feature = "quasar", feature = "record-queries"))]
+    let inverse_hints = {
+        p3_basefold::query_recorder::reset();
+        verify(
+            &config,
+            VerifierInstances::new(vec![VerifierInstance::new(&air, &vk, log_height, &pis)]),
+            &proof,
+            0,
+            &mut challenger(),
+        )
+        .expect("honest proof must verify");
+        let idxs = p3_basefold::query_recorder::take_sorted();
+        let hints = eddsa_example::backend::twist_inverse_hints(&idxs);
+        eprintln!(
+            "  inverse hints: {} distinct indices, {} B",
+            hints.0.len(),
+            hints.0.len() * 36
+        );
+        hints
+    };
+    #[cfg(not(all(feature = "quasar", feature = "record-queries")))]
+    let inverse_hints: (Vec<u32>, Vec<p3_ed25519::Ed25519>) = (Vec::new(), Vec::new());
+
+    // Strategy M: commit to the twist table and ship the queried leaves with a
+    // single pruned multi-path, instead of the guest carrying the whole table
+    // in its program image (~86 MB of `.vmexe`, charged on every `prove app`).
+    //
+    // `MERKLE_TWISTS=1` turns it on. One tree covers both codes: they share a
+    // seed and the index layout is a prefix, so a tree sized to the larger
+    // `log_cols` contains every index the smaller can reach.
+    #[cfg(all(feature = "quasar", feature = "record-queries"))]
+    let merkle_twists = if std::env::var("MERKLE_TWISTS").is_ok() {
+        let idxs = {
+            p3_basefold::query_recorder::reset();
+            verify(
+                &config,
+                VerifierInstances::new(vec![VerifierInstance::new(&air, &vk, log_height, &pis)]),
+                &proof,
+                0,
+                &mut challenger(),
+            )
+            .expect("honest proof must verify");
+            p3_basefold::query_recorder::take_sorted()
+        };
+        // One tree for both codes: same seed, prefix index layout.
+        let k = eddsa_example::backend::resolved_params(log_height, NUM_EDDSA_COLS).0.log_cols.max(
+            eddsa_example::backend::resolved_params(log_height, NUM_EDDSA_PREPROCESSED_COLS).0.log_cols,
+        );
+        let payload = eddsa_example::backend::twist_merkle_payload(k, &idxs);
+        eprintln!(
+            "  merkle twists: {} leaves, {} sibling digests ({} B), tree 2^{} leaves depth {}",
+            payload.0.len(),
+            payload.2.sibling_hashes.len(),
+            payload.2.sibling_hashes.len() * 32,
+            payload.3,
+            payload.4,
+        );
+        Some((payload.0, payload.1, payload.2))
+    } else {
+        None
+    };
+    #[cfg(not(all(feature = "quasar", feature = "record-queries")))]
+    let merkle_twists: Option<(
+        Vec<u32>,
+        Vec<p3_ed25519::Ed25519>,
+        p3_merkle_tree::PrunedMerklePaths<p3_baby_bear::BabyBear, 8>,
+    )> = None;
+
     // The flat format, not postcard: the guest deserialises this before it can
     // verify anything, and postcard's per-element machinery cost it ~710
     // instructions per field element against ~152 for a flat read. Slightly
@@ -109,6 +189,8 @@ fn main() {
         &vk,
         &proof,
         &quasar_setup,
+        &inverse_hints,
+        &merkle_twists,
     ))
     .expect("serialize");
     std::fs::write(&path, &blob).expect("write");

@@ -112,6 +112,10 @@ where
     let (verifying_key, instances) = instances.into_parts();
     let preprocessed_commitment = verifying_key.preprocessed.as_ref();
 
+    // In direct mode nothing was committed, so neither key nor proof carries
+    // preprocessed data and the guard below is trivially satisfied.
+    let direct_preprocessed = config.evaluates_preprocessed_directly();
+
     // The proof's preprocessed opening must match what the key expects.
     match (preprocessed_commitment, proof.preprocessed_opening.as_ref()) {
         (Some(_), None) => return Err(VerificationError::MissingPreprocessedOpening),
@@ -123,9 +127,10 @@ where
     // depends on it.
     if let Some(commitment) = preprocessed_commitment {
         challenger.observe(commitment.clone());
-    } else if instances
-        .iter()
-        .any(|instance| instance.air.preprocessed_width() != 0)
+    } else if !direct_preprocessed
+        && instances
+            .iter()
+            .any(|instance| instance.air.preprocessed_width() != 0)
     {
         return Err(VerificationError::PreprocessedOpeningCountMismatch {
             expected: instances.len(),
@@ -212,15 +217,40 @@ where
     // Opened batches and their next-column lists share the non-empty order.
     // One iterator advances through them, stepping only for non-empty AIRs.
     // A shortfall yields an empty view, which the closing check rejects instead of panicking.
+    // Direct mode: evaluate the preprocessed tables here instead of reading an
+    // opening. The values are the same multilinear extensions the commitment
+    // would have opened — `preprocessed_evals_at` returns every column's next
+    // value, so project onto the ones the AIR actually reads.
+    let direct_evals = direct_preprocessed
+        .then(|| config.preprocessed_evals_at(&instances.preprocessed_points(&reduction.point)));
+    let direct_next: Vec<Vec<C::Challenge>> = direct_evals
+        .iter()
+        .flatten()
+        .zip(preprocessed_next_columns.iter())
+        .map(|(evals, next_columns)| next_columns.iter().map(|&c| evals.next[c]).collect())
+        .collect();
+
     let mut preprocessed_batches = preprocessed_evals
         .iter()
         .flatten()
+        .zip(preprocessed_next_columns.iter());
+    let mut direct_batches = direct_evals
+        .iter()
+        .flatten()
+        .zip(direct_next.iter())
         .zip(preprocessed_next_columns.iter());
     let preprocessed_openings = instances
         .iter()
         .map(|instance| {
             if instance.air.preprocessed_width() == 0 {
                 TableOpening::empty()
+            } else if direct_preprocessed {
+                direct_batches.next().map_or_else(
+                    TableOpening::empty,
+                    |((evals, next_values), next_columns)| {
+                        TableOpening::new(&evals.current, next_columns, next_values)
+                    },
+                )
             } else {
                 preprocessed_batches.next().map_or_else(
                     TableOpening::empty,

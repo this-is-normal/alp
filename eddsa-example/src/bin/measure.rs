@@ -79,7 +79,7 @@ fn measure(num_bits: usize, num_signatures: usize) {
     let log_height = log2_ceil_usize(height);
 
     let t_setup = std::time::Instant::now();
-    let config = config_for_eddsa(log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
+    let config = config_for_eddsa(num_bits, log_height, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS);
     let (pk, vk) = setup(&config, &[&air], &mut challenger());
     let setup_ms = t_setup.elapsed().as_secs_f64() * 1e3;
 

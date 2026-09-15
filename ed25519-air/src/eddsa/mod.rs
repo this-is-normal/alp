@@ -22,6 +22,6 @@ pub use columns::{
 };
 pub use generation::{
     add_row, bits_to_field, double_and_add, generate_preprocessed_trace,
-    generate_preprocessed_trace_batch, generate_trace_rows,
-    ladder_results, public_values, sgc_a_row, sgc_r_row, trace_height,
+    generate_preprocessed_trace_batch, generate_trace_rows, ladder_results,
+    preprocessed_evals_at, public_values, sgc_a_row, sgc_r_row, trace_height,
 };

@@ -28,6 +28,11 @@ tracing.workspace = true
 # instruction count can be split by phase. Never enable in a real verifier.
 ablate-after-sumcheck = []
 ablate-after-merkle = []
+# INSTRUMENTATION ONLY: records which foldable-code indices a verifier reads, so
+# a recursion *host* can ship exactly those elements (or Merkle paths to them)
+# instead of baking the whole table into the guest image. Needs `std` for the
+# thread-local, so it is never on in a guest.
+record-queries = []
 # Rayon parallelism across the foldable-code encode, the fold rounds, and the
 # per-round sumcheck reductions — BaseFold's whole prover.
 parallel = ["p3-maybe-rayon/parallel"]
