@@ -1,0 +1,105 @@
+{
+  "date": "2026-09-11",
+  "layer": "pipeline",
+  "target": "Quasar end-to-end, 256 sigs (native -> app -> stark -> evm)",
+  "headline": "256 ed25519 sigs -> 534,636 B aggregated proof in ~34 s; KZG stage blocked on an S3 stall",
+  "host": "vultr4",
+  "commit": "70cb077d",
+  "branch": "quazar2",
+  "dirty": "true (19 files)",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12",
+    "cores_visible": 256,
+    "cpu_quota_cores": 30.72,
+    "memory_gb": 503,
+    "gpu": "RTX 5090 32 GB",
+    "driver": "580.159.03",
+    "cuda": "13.1"
+  },
+  "toolchain": {
+    "rustc": "1.98.1",
+    "cargo_openvm": "v2.0.2 (59a69b8) [cuda]"
+  },
+  "parameters": {
+    "num_bits": 253,
+    "signatures": 256,
+    "trace": "65536x45",
+    "bf_inv_rate": 4,
+    "pow_bits": 16,
+    "merkle_cap_height": 0,
+    "max_log_cols": 16,
+    "segment_max_memory_gib": 26,
+    "features_host": "quasar,bb-hash,parallel",
+    "chips_guest": [
+      "rv32i",
+      "rv32m",
+      "io",
+      "modular",
+      "poseidon2"
+    ],
+    "exe_commit": "0x005f1052d168bc19652e72adb75879d3a5f8232da79712dde63b5cfe33ca4a3a",
+    "vmexe_mb": 93
+  },
+  "measured": true,
+  "stages": [
+    {
+      "stage": 1,
+      "name": "native Quasar prove",
+      "setup_ms": 254.9,
+      "prove_ms": 3741.4,
+      "verify_ms": 124.1,
+      "output_bytes": 2196130,
+      "bytes_per_sig": 8578.6,
+      "ms_per_sig": 14.61,
+      "note": "script-level secs=40 is almost entirely cargo compilation and is not the prover figure"
+    },
+    {
+      "stage": 2,
+      "name": "prove app",
+      "wall_clock_s": 28,
+      "output_bytes": 7028421,
+      "note": "byte-identical repeat of the 256-sig row in 2026-09-11-recursion-quasar-direct-preprocessed"
+    },
+    {
+      "stage": 3,
+      "name": "prove stark",
+      "wall_clock_s": 30,
+      "cumulative": true,
+      "output_bytes": 534636,
+      "note": "contains stage 2; +2 s marginal reproduces at a second batch size (16 sigs: app 21 s -> stark 23 s; 256 sigs: app 28 s -> stark 30 s)",
+      "root_proof_constant_check": {
+        "signatures_16_bytes": 534636,
+        "signatures_256_bytes": 534636,
+        "wall_clock_16_s": 23,
+        "conclusion": "root proof is constant across batch size, as documented; the documented VALUE (630,732 B) is stale"
+      }
+    },
+    {
+      "stage": 4,
+      "name": "prove evm",
+      "status": "blocked",
+      "blocker": "cargo openvm setup --evm --download stalled: 'minimum throughput was specified at 1 B/s, but throughput of 0 B/s was observed' on kzg_bn254_19.srs after 13m38s and 64 MB of ~2.15 GB",
+      "note": "infrastructure failure on the vast.ai box, not a scheme result; 130 GB disk free; retry loop in progress"
+    }
+  ],
+  "cumulative_not_additive": true,
+  "open_questions": [
+    {
+      "q": "which change moved the root-proof constant",
+      "detail": "630,732 B (2026-09-09) -> 534,636 B (2026-09-11). Constant-ness confirmed at S=16 and S=256. Cannot be isolated from here: the old agg keys were overwritten in place by the --evm setup attempts and the 2026-09-09 stark.proof was overwritten by stage 3.",
+      "status": "partially resolved"
+    }
+  ],
+  "comparable_to": [
+    {
+      "run": "2026-09-11-recursion-quasar-direct-preprocessed",
+      "reason": "same box, commit, parameters and .vmexe; stage 2 is that record's 256-sig row repeated"
+    }
+  ],
+  "not_comparable_to": [
+    {
+      "run": "2026-09-07-pcs-native-comparison",
+      "reason": "stage 1 only: different box (vultr3) AND before the preprocessed-commitment removal; the 6.96 s -> 3.74 s gap cannot be attributed to either cause alone"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+{
+  "date": "2026-09-11",
+  "layer": "recursion",
+  "target": "Quasar guest (OpenVM), direct preprocessed evaluation",
+  "headline": "62.3 M instr @ 16 sigs (10.4x since 2026-09-09); cost cliff above 256 sigs from MAX_LOG_COLS=16",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true (19 files)",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12", "cores_visible": 256, "cpu_quota_cores": 30.72,
+    "memory_gb": 503, "gpu": "RTX 5090 32 GB", "driver": "580.159.03", "cuda": "13.1"
+  },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "parameters": {
+    "num_bits": 253, "qa_index": 2,
+    "bf_inv_rate": 4, "pow_bits": 16,
+    "merkle_cap_height": 0, "max_log_cols": 16,
+    "segment_max_memory_gib": 26,
+    "features_host": "quasar,bb-hash,parallel",
+    "chips_guest": ["rv32i", "rv32m", "io", "modular", "poseidon2"],
+    "prove_app_invocation": "--exe (build/keygen path excluded)"
+  },
+  "measured": true,
+  "rows": [
+    { "signatures": 16,   "blob_bytes": 1305070, "instructions": 62343966,  "segments": 6,  "code_table": "baked", "prove_app_s": 21, "app_proof_bytes": 5202291,  "s_per_sig": 1.31 },
+    { "signatures": 32,   "blob_bytes": 1457918, "instructions": 67476735,  "segments": 7,  "code_table": "baked", "prove_app_s": 24, "app_proof_bytes": 5537700,  "s_per_sig": 0.75 },
+    { "signatures": 64,   "blob_bytes": 1619622, "instructions": 72561795,  "segments": 7,  "code_table": "baked", "prove_app_s": 24, "app_proof_bytes": 5781529,  "s_per_sig": 0.375 },
+    { "signatures": 128,  "blob_bytes": 1806390, "instructions": 78563621,  "segments": 8,  "code_table": "baked", "prove_app_s": 27, "app_proof_bytes": 6706670,  "s_per_sig": 0.211 },
+    { "signatures": 256,  "blob_bytes": 2214994, "instructions": 89069686,  "segments": 9,  "code_table": "baked", "prove_app_s": 28, "app_proof_bytes": 7028421,  "s_per_sig": 0.109, "verify_app": "pass" },
+    { "signatures": 512,  "blob_bytes": 2404410, "instructions": 345930649, "segments": 31, "code_table": "lazy_fallback", "prove_app_s": 89, "app_proof_bytes": 23081846, "s_per_sig": 0.174, "verify_app": "pass" },
+    { "signatures": 1024, "blob_bytes": 2630250, "instructions": 367371064, "segments": 33, "code_table": "lazy_fallback", "prove_app_s": 89, "app_proof_bytes": 24295107, "s_per_sig": 0.087, "verify_app": "pass" }
+  ],
+  "native_prover_same_change": {
+    "signatures": 1024,
+    "setup_ms": { "before": 9736, "after": 528 },
+    "prove_ms": { "before": 14070, "after": 12386 },
+    "verify_ms": { "before": 261, "after": 147 },
+    "proof_mb": { "before": 4.86, "after": 2.67 }
+  },
+  "cliff": {
+    "cause": "MAX_LOG_COLS=16 baked twist+inverse table; N2=2^17 at 512 and 2^18 at 1024 overflow it",
+    "per_derived_level_instructions": 14400000,
+    "derivation": "247 M excess / 17 levels at 512; 257 M / 18 levels at 1024 — two independent points agree",
+    "split_sampling_vs_inversion": "NOT MEASURED — an earlier claim of ~95% inversion was an unjustified attribution",
+    "fixes": [
+      { "option": "per-index table fallback (hybrid)", "table_growth": "none", "modelled_512_instructions": 113000000, "modelled_1024_instructions": 139000000, "note": "indices are a prefix layout; a 2^16 table already covers levels 1-16, so only 2 of 18 levels derive" },
+      { "option": "batch inversion on the lazy path", "modelled_gain": "~3x on the lazy path, not the ~20x previously claimed" },
+      { "option": "raise MAX_LOG_COLS to 18", "rejected": true, "reason": "table is 2^k: 16.8 MB -> 67 MB of data, ~350 MB .vmexe; 93 MB already costs ~16 s per prove app, paid at every batch size" }
+    ]
+  },
+  "comparable_to": [
+    { "run": "2026-09-10-recursion-quasar-flat", "reason": "same box, parameters and chips; only the preprocessed-commitment removal differs (instructions column only)" }
+  ],
+  "not_comparable_to": [
+    { "run": "2026-09-10-recursion-quasar-flat", "reason": "WALL-CLOCK column only: that run included the build/keygen path (~18 s); this one uses --exe" },
+    { "run": "2026-09-09-recursion-basefold", "reason": "BaseFold predates this and several other shared-crate fixes that would lift it too" }
+  ]
+}

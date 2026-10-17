@@ -7,6 +7,7 @@ use p3_challenger::{CanObserve, CanSampleUniformBits, FieldChallenger, GrindingC
 use p3_commit::MultilinearPcs;
 use p3_field::{ExtensionField, Field};
 use p3_sumcheck::PrescribedPointPcs;
+use p3_sumcheck::layout::Table;
 
 use crate::ProverInstances;
 use crate::config::{Commitment, MultiStarkConfig, ProverData};
@@ -129,21 +130,46 @@ where
     // An AIR with preprocessed columns takes the next committed table in setup order.
     // An AIR without them takes `None`.
     // A missing preprocessed key is valid only when no AIR declares preprocessed columns.
+    // In direct mode nothing was committed, so the prover regenerates the
+    // preprocessed traces here. They are public and fixed by the AIR; only the
+    // commitment and the opening are skipped, not the data — the zerocheck
+    // still has to evaluate constraints against them.
+    let direct_preprocessed = config.evaluates_preprocessed_directly();
+    let owned_preprocessed: Vec<Option<Table<C::Val>>> = if direct_preprocessed {
+        instances
+            .iter()
+            .map(|instance| {
+                (instance.air.preprocessed_width() != 0).then(|| {
+                    let trace = instance.air.preprocessed_trace().expect(
+                        "AIR with preprocessed columns must return a preprocessed trace",
+                    );
+                    Table::new(trace.transpose())
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let preprocessed_data = proving_key.preprocessed.as_ref().map(|p| &p.prover_data);
     let mut next_table = 0;
-    let preprocessed_tables = instances
-        .iter()
-        .map(|instance| {
-            (instance.air.preprocessed_width() != 0).then(|| {
-                let data = preprocessed_data.expect(
-                    "preprocessed proving key is missing for an AIR with preprocessed columns",
-                );
-                let table = config.committed_table(data, next_table);
-                next_table += 1;
-                table
+    let preprocessed_tables = if direct_preprocessed {
+        owned_preprocessed.iter().map(Option::as_ref).collect::<Vec<_>>()
+    } else {
+        instances
+            .iter()
+            .map(|instance| {
+                (instance.air.preprocessed_width() != 0).then(|| {
+                    let data = preprocessed_data.expect(
+                        "preprocessed proving key is missing for an AIR with preprocessed columns",
+                    );
+                    let table = config.committed_table(data, next_table);
+                    next_table += 1;
+                    table
+                })
             })
-        })
-        .collect::<Vec<_>>();
+            .collect::<Vec<_>>()
+    };
 
     // 3. Reduce all AIR constraints to one batched sumcheck and one bound point.
     // The committed prover opens columns through the commitment schemes below, so
@@ -160,6 +186,7 @@ where
 
     drop(tables);
     drop(preprocessed_tables);
+    drop(owned_preprocessed);
 
     // 4. Open each main trace table at its suffix of the common bound point.
     let opening = config.pcs().open_at(

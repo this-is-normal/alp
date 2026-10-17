@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-13",
+  "layer": "recursion",
+  "target": "Quasar guest, per-index hybrid table fallback (strategy C)",
+  "headline": "cliff above 256 sigs removed: 3.15x at 512, 2.80x at 1024, for +0.06% below the table",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true (20+ files)",
+  "hardware": { "cpu": "AMD EPYC 7B12", "cpu_quota_cores": 30.72, "memory_gb": 503, "gpu": "RTX 5090 32 GB", "cuda": "13.1" },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "parameters": {
+    "num_bits": 253, "bf_inv_rate": 4, "pow_bits": 16, "merkle_cap_height": 0,
+    "max_log_cols": 16, "max_log_cols_changed": false,
+    "vmexe_bytes": 93042506,
+    "change": "per-index fallback in baked_twist/baked_twist_inverse; guest-only, no alp2 or blob change"
+  },
+  "measured": true,
+  "rows": [
+    { "signatures": 32,   "instructions_before": 67476735,  "instructions": 67522115,  "segments_before": 7,  "segments": 7,  "cells": 2682461761 },
+    { "signatures": 64,   "instructions_before": 72561795,  "instructions": 72609342,  "segments_before": 7,  "segments": 7,  "cells": 2881612925 },
+    { "signatures": 128,  "instructions_before": 78563621,  "instructions": 78610104,  "segments_before": 8,  "segments": 8,  "cells": 3116215550 },
+    { "signatures": 256,  "instructions_before": 89069686,  "instructions": 89116798,  "segments_before": 9,  "segments": 9,  "cells": 3523137015 },
+    { "signatures": 512,  "instructions_before": 345930649, "instructions": 109809029, "segments_before": 31, "segments": 11, "cells": 4389673359, "speedup": 3.15 },
+    { "signatures": 1024, "instructions_before": 367371064, "instructions": 131247719, "segments_before": 33, "segments": 12, "cells": 5285770738, "speedup": 2.80 }
+  ],
+  "overhead_below_table_instructions": 46000,
+  "model_validation": {
+    "per_level_cost_from": "2026-09-11-recursion-quasar-lazy-cost-attribution",
+    "per_level_instructions": 14760000,
+    "projected_512": 113000000, "measured_512": 109809029, "error_512": -0.028,
+    "projected_1024": 140000000, "measured_1024": 131247719, "error_1024": -0.063
+  },
+  "comparable_to": [ { "run": "2026-09-11-recursion-quasar-direct-preprocessed", "reason": "same box, blobs and parameters; its rows are the before column" } ],
+  "not_comparable_to": [ { "run": "pre-2026-09-11 runs", "reason": "the preprocessed-commitment removal sits in between" } ]
+}

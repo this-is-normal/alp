@@ -1,0 +1,64 @@
+[package]
+name = "p3-quasar"
+description = "Quasar: a field-agnostic multilinear PCS combining a quasi-abelian code commitment with BaseFold through a QA-tailored code-switching argument (eprint 2026/1839)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-basefold.workspace = true
+# For the `LinearCode` trait the QA encoder implements.
+p3-brakedown.workspace = true
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-multilinear-util.workspace = true
+p3-qa-code.workspace = true
+p3-security.workspace = true
+p3-sumcheck.workspace = true
+p3-util.workspace = true
+tracing.workspace = true
+
+serde = { workspace = true, features = ["derive", "alloc"] }
+p3-maybe-rayon.workspace = true
+# Only for the `count-ops` probe; the scheme itself is Mmcs-generic.
+p3-merkle-tree = { path = "../merkle-tree", optional = true }
+
+[features]
+# COST ABLATION ONLY: `verify_core` returns Ok early so a recursion guest's
+# instruction count can be split by phase. Never enable in a real verifier.
+# INSTRUMENTATION ONLY: attribute pruned-Merkle work to each Basefold opening.
+count-ops = ["dep:p3-merkle-tree", "p3-merkle-tree/count-ops"]
+ablate-after-columns = []
+ablate-after-encoding = []
+ablate-after-reduction = []
+ablate-after-online-opening = []
+ablate-after-both-openings = []
+parallel = [
+    "p3-maybe-rayon/parallel",
+    "p3-qa-code/parallel",
+    "p3-brakedown/parallel",
+    "p3-basefold/parallel",
+    "p3-sumcheck/parallel",
+    "p3-multilinear-util/parallel",
+]
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-ed25519 = { path = "../ed25519" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-symmetric = { path = "../symmetric" }
+p3-commit = { path = "../commit" }
+
+criterion.workspace = true
+rand.workspace = true
+rand_chacha = { version = "0.10", default-features = false }
+
+[[bench]]
+name = "quasar_pcs"
+harness = false
+
+[lints]
+workspace = true

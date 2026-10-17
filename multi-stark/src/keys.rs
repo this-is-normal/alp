@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use p3_air::BaseAir;
 use p3_commit::MultilinearPcs;
 use p3_sumcheck::layout::Table;
+use serde::{Deserialize, Serialize};
 
 use crate::config::{Commitment, MultiStarkConfig, ProverData};
 
@@ -33,6 +34,12 @@ pub struct ProvingKey<C: MultiStarkConfig> {
 }
 
 /// The verifier's key for a fixed AIR and trace height.
+///
+/// Serializable so a *recursive* verifier (an OpenVM guest, say) can be handed
+/// the preprocessed commitment rather than re-running `setup` — which would
+/// mean regenerating and re-committing the whole preprocessed trace in-circuit.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(bound = "")]
 pub struct VerifyingKey<C: MultiStarkConfig> {
     /// Batched preprocessed commitment, present only when at least one AIR declares it.
     pub(crate) preprocessed: Option<Commitment<C>>,
@@ -71,6 +78,16 @@ where
     A: BaseAir<C::Val>,
     Commitment<C>: Clone,
 {
+    // The verifier evaluates these itself, so there is nothing to commit: no
+    // preprocessed commitment in the key, no opening in the proof, and no
+    // preprocessed bytes on the wire.
+    if config.evaluates_preprocessed_directly() {
+        return (
+            ProvingKey { preprocessed: None },
+            VerifyingKey { preprocessed: None },
+        );
+    }
+
     let mut tables = Vec::new();
 
     for air in airs.iter().filter(|air| air.preprocessed_width() != 0) {

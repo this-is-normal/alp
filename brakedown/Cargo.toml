@@ -1,0 +1,51 @@
+[package]
+name = "p3-brakedown"
+description = "Brakedown linear-time linear code (Spielman recursive construction) — field-agnostic encoder for a Brakedown-style multilinear PCS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-challenger.workspace = true
+p3-commit.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-multilinear-util.workspace = true
+p3-sumcheck.workspace = true
+p3-util.workspace = true
+
+libm.workspace = true
+rand.workspace = true
+serde = { workspace = true, features = ["derive", "alloc"] }
+tracing.workspace = true
+# The rayon/serial shim. Serial (no_std) by default; the `parallel` feature flips
+# it (and, via Cargo unification, the shared instance used by merkle-tree etc.)
+# to rayon. Used directly by the Reed–Solomon encoder's parallel multipoint eval.
+p3-maybe-rayon.workspace = true
+
+[features]
+# Turn on rayon parallelism across the (shared) maybe-rayon shim — the Merkle
+# tree build (~97% of `commit`) and the Reed–Solomon `vandermonde_encode`.
+parallel = ["p3-maybe-rayon/parallel"]
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-challenger = { path = "../challenger" }
+p3-ed25519 = { path = "../ed25519" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-stark-stats = { path = "../stark-stats" }
+p3-symmetric = { path = "../symmetric" }
+
+criterion.workspace = true
+
+[[bench]]
+name = "tensor_pcs"
+harness = false
+
+[[bench]]
+name = "tensor_pcs_ed25519"
+harness = false
+
+[lints]
+workspace = true

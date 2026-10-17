@@ -10,6 +10,10 @@ keywords.workspace = true
 categories.workspace = true
 
 [features]
+# COST ABLATION ONLY: `verify` returns Ok after the zerocheck, skipping every
+# Merkle check. For splitting a recursion guest's cost, never for real use.
+ablate-zerocheck-only = []
+ablate-before-closing = []
 parallel = [
     "p3-maybe-rayon/parallel",
     "p3-multilinear-util/parallel",

@@ -1,0 +1,34 @@
+[package]
+name = "pcs-profile"
+description = "PCS-only profiling & benchmarking harness: proof size, hash-perm counts (by role), and ed25519 arithmetic (mul/sq/inv/add) for each multilinear PCS (Basefold, Brakedown, ...), isolated from any AIR."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-field.workspace = true
+p3-ed25519.workspace = true
+p3-baby-bear.workspace = true
+p3-symmetric.workspace = true
+p3-challenger.workspace = true
+p3-merkle-tree.workspace = true
+p3-multilinear-util.workspace = true
+p3-brakedown.workspace = true
+p3-qa-code.workspace = true
+p3-quasar.workspace = true
+p3-security.workspace = true
+p3-sumcheck.workspace = true
+p3-basefold.workspace = true
+p3-stark-stats.workspace = true
+rand.workspace = true
+rand_chacha = { version = "0.10", default-features = false }
+
+[features]
+# On by default so the profiler reports arithmetic counts. Turn OFF (`--no-default-features`) for
+# timing benches, where the atomic-increment overhead would pollute wall-clock.
+default = ["count-ops"]
+count-ops = ["p3-ed25519/count-ops"]
+
+[lints]
+workspace = true

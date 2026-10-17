@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use p3_challenger::{FieldChallenger, GrindingChallenger};
-use p3_field::{ExtensionField, Field, TwoAdicField, dot_product};
+use p3_field::{ExtensionField, Field, dot_product};
 use p3_multilinear_util::point::Point;
 use p3_multilinear_util::poly::Poly;
 use p3_multilinear_util::split_eq::SplitEq;
@@ -36,7 +36,7 @@ pub struct SuffixProver<F: Field, EF: ExtensionField<F>> {
     pub(crate) claims: StackedClaims<F, EF>,
 }
 
-impl<F: TwoAdicField, EF: ExtensionField<F>> Layout<F, EF> for SuffixProver<F, EF> {
+impl<F: Field, EF: ExtensionField<F>> Layout<F, EF> for SuffixProver<F, EF> {
     fn from_witness(witness: Witness<F>) -> Self {
         // Move the witness fields out so the prover owns them outright.
         // The stacked polynomial is intentionally discarded: every suffix-mode
@@ -425,7 +425,7 @@ impl<F: TwoAdicField, EF: ExtensionField<F>> Layout<F, EF> for SuffixProver<F, E
     }
 }
 
-impl<F: TwoAdicField, EF: ExtensionField<F>> SuffixProver<F, EF> {
+impl<F: Field, EF: ExtensionField<F>> SuffixProver<F, EF> {
     /// Compress every stacked-table slot by fixing the suffix challenges.
     #[tracing::instrument(skip_all)]
     pub(crate) fn compress_stacked(&self, rs: &Point<EF>) -> Poly<EF> {

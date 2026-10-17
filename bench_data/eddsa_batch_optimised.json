@@ -1,0 +1,228 @@
+{
+ "machine": "vultr3 (24 vCPU, serial: no `parallel` feature)",
+ "hash": "bb-hash (Poseidon2 over BabyBear)",
+ "num_bits": 253,
+ "optimisations": "Merkle path pruning (all backends); 16-bit grinding (BaseFold and Quasar only); Merkle cap 0 (measured as a net loss under pruning)",
+ "rows": [
+  {
+   "backend": "Brakedown",
+   "signatures": 1,
+   "trace_rows": 256,
+   "trace_cols": 45,
+   "proof_bytes": 1011315,
+   "setup_ms": 79.9,
+   "prove_ms": 242.5,
+   "prove_ms_per_sig": 242.52,
+   "verify_ms": 93.9
+  },
+  {
+   "backend": "Brakedown",
+   "signatures": 4,
+   "trace_rows": 1024,
+   "trace_cols": 45,
+   "proof_bytes": 1894247,
+   "setup_ms": 207.7,
+   "prove_ms": 780.7,
+   "prove_ms_per_sig": 195.18,
+   "verify_ms": 163.2
+  },
+  {
+   "backend": "Brakedown",
+   "signatures": 16,
+   "trace_rows": 4096,
+   "trace_cols": 45,
+   "proof_bytes": 3484600,
+   "setup_ms": 622.8,
+   "prove_ms": 2751.8,
+   "prove_ms_per_sig": 171.99,
+   "verify_ms": 291.8
+  },
+  {
+   "backend": "Brakedown",
+   "signatures": 64,
+   "trace_rows": 16384,
+   "trace_cols": 45,
+   "proof_bytes": 6493334,
+   "setup_ms": 2074.8,
+   "prove_ms": 10487.4,
+   "prove_ms_per_sig": 163.86,
+   "verify_ms": 550.0
+  },
+  {
+   "backend": "Brakedown",
+   "signatures": 256,
+   "trace_rows": 65536,
+   "trace_cols": 45,
+   "proof_bytes": 12278959,
+   "setup_ms": 7736.2,
+   "prove_ms": 41108.7,
+   "prove_ms_per_sig": 160.58,
+   "verify_ms": 1058.3
+  },
+  {
+   "backend": "Ligero",
+   "signatures": 1,
+   "trace_rows": 256,
+   "trace_cols": 45,
+   "proof_bytes": 652489,
+   "setup_ms": 49.6,
+   "prove_ms": 346.2,
+   "prove_ms_per_sig": 346.22,
+   "verify_ms": 44.8
+  },
+  {
+   "backend": "Ligero",
+   "signatures": 4,
+   "trace_rows": 1024,
+   "trace_cols": 45,
+   "proof_bytes": 1298273,
+   "setup_ms": 281.0,
+   "prove_ms": 2116.2,
+   "prove_ms_per_sig": 529.05,
+   "verify_ms": 103.3
+  },
+  {
+   "backend": "Ligero",
+   "signatures": 16,
+   "trace_rows": 4096,
+   "trace_cols": 45,
+   "proof_bytes": 2584430,
+   "setup_ms": 1701.1,
+   "prove_ms": 14358.0,
+   "prove_ms_per_sig": 897.38,
+   "verify_ms": 253.6
+  },
+  {
+   "backend": "Ligero",
+   "signatures": 64,
+   "trace_rows": 16384,
+   "trace_cols": 45,
+   "proof_bytes": 5152772,
+   "setup_ms": 11666.4,
+   "prove_ms": 104990.6,
+   "prove_ms_per_sig": 1640.48,
+   "verify_ms": 633.8
+  },
+  {
+   "backend": "Ligero",
+   "signatures": 256,
+   "trace_rows": 65536,
+   "trace_cols": 45,
+   "proof_bytes": 10278692,
+   "setup_ms": 84113.1,
+   "prove_ms": 799526.8,
+   "prove_ms_per_sig": 3123.15,
+   "verify_ms": 1741.6
+  },
+  {
+   "backend": "BaseFold",
+   "signatures": 1,
+   "trace_rows": 256,
+   "trace_cols": 45,
+   "proof_bytes": 781894,
+   "setup_ms": 1468.5,
+   "prove_ms": 1518.0,
+   "prove_ms_per_sig": 1517.97,
+   "verify_ms": 51.6
+  },
+  {
+   "backend": "BaseFold",
+   "signatures": 4,
+   "trace_rows": 1024,
+   "trace_cols": 45,
+   "proof_bytes": 1106343,
+   "setup_ms": 5832.5,
+   "prove_ms": 4127.9,
+   "prove_ms_per_sig": 1031.98,
+   "verify_ms": 73.6
+  },
+  {
+   "backend": "BaseFold",
+   "signatures": 16,
+   "trace_rows": 4096,
+   "trace_cols": 45,
+   "proof_bytes": 1497735,
+   "setup_ms": 23475.7,
+   "prove_ms": 13586.4,
+   "prove_ms_per_sig": 849.15,
+   "verify_ms": 98.6
+  },
+  {
+   "backend": "BaseFold",
+   "signatures": 64,
+   "trace_rows": 16384,
+   "trace_cols": 45,
+   "proof_bytes": 1967533,
+   "setup_ms": 93772.9,
+   "prove_ms": 53455.7,
+   "prove_ms_per_sig": 835.25,
+   "verify_ms": 128.8
+  },
+  {
+   "backend": "BaseFold",
+   "signatures": 256,
+   "trace_rows": 65536,
+   "trace_cols": 45,
+   "proof_bytes": 2497901,
+   "setup_ms": 376177.6,
+   "prove_ms": 216743.0,
+   "prove_ms_per_sig": 846.65,
+   "verify_ms": 160.2
+  },
+  {
+   "backend": "Quasar",
+   "signatures": 1,
+   "trace_rows": 256,
+   "trace_cols": 45,
+   "proof_bytes": 1320169,
+   "setup_ms": 102.0,
+   "prove_ms": 1378.1,
+   "prove_ms_per_sig": 1378.13,
+   "verify_ms": 80.4
+  },
+  {
+   "backend": "Quasar",
+   "signatures": 4,
+   "trace_rows": 1024,
+   "trace_cols": 45,
+   "proof_bytes": 1775885,
+   "setup_ms": 343.8,
+   "prove_ms": 2975.0,
+   "prove_ms_per_sig": 743.75,
+   "verify_ms": 120.6
+  },
+  {
+   "backend": "Quasar",
+   "signatures": 16,
+   "trace_rows": 4096,
+   "trace_cols": 45,
+   "proof_bytes": 2240553,
+   "setup_ms": 1378.1,
+   "prove_ms": 6568.7,
+   "prove_ms_per_sig": 410.54,
+   "verify_ms": 158.9
+  },
+  {
+   "backend": "Quasar",
+   "signatures": 64,
+   "trace_rows": 16384,
+   "trace_cols": 45,
+   "proof_bytes": 2864595,
+   "setup_ms": 5538.4,
+   "prove_ms": 17907.4,
+   "prove_ms_per_sig": 279.8,
+   "verify_ms": 207.0
+  },
+  {
+   "backend": "Quasar",
+   "signatures": 256,
+   "trace_rows": 65536,
+   "trace_cols": 45,
+   "proof_bytes": 3816977,
+   "setup_ms": 16546.9,
+   "prove_ms": 56189.4,
+   "prove_ms_per_sig": 219.49,
+   "verify_ms": 271.3
+  }
+ ]
+}

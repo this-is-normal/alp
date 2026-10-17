@@ -11,3 +11,10 @@ proptest-regressions/
 # Temporary docs
 docs/
 docs-ai/
+
+# AI-context handoff doc (local only, not for upstream)
+BRAKEDOWN_ED25519_NOTES.md
+
+# stray unreadable sed artifact (sshfs) — dup of encode.rs
+brakedown/tests/sedfpqwN8
+

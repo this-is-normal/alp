@@ -1,0 +1,154 @@
+{
+  "date": "2026-09-14",
+  "layer": "recursion",
+  "target": "Quasar recursion guest: full phase x operation cost anatomy",
+  "headline": "cryptography is 36.6% of the guest; 60% is deserialisation (33.9 M) plus opening machinery (46.9 M)",
+  "host": "vultr4",
+  "commit": "70cb077d",
+  "branch": "quazar2",
+  "dirty": "true",
+  "measured": true,
+  "method": [
+    "phase cost measured in-guest via 9 ablate-* cuts plus 2 new prof-stop-* cuts (black_box'd)",
+    "cryptographic content from count-ops applied under the SAME cuts, giving per-phase operation counts",
+    "accounting ratio = ops-modelled / measured, per phase"
+  ],
+  "parameters": {
+    "num_bits": 253,
+    "strategy": "C+D",
+    "max_log_cols": 16,
+    "bf_inv_rate": 4,
+    "pow_bits": 16
+  },
+  "totals": {
+    "256": 94239522,
+    "4096": 135042075
+  },
+  "phases_4096": [
+    {
+      "phase": "deserialisation",
+      "measured": 33911700,
+      "crypto_ops": 0,
+      "accounted": 0.0,
+      "non_crypto": 33911700,
+      "share": 0.251
+    },
+    {
+      "phase": "config",
+      "measured": 67650,
+      "crypto_ops": 0,
+      "accounted": null,
+      "non_crypto": 67650,
+      "share": 0.001
+    },
+    {
+      "phase": "zerocheck",
+      "measured": 2367164,
+      "crypto_ops": 1918052,
+      "accounted": 0.81,
+      "non_crypto": 449112,
+      "share": 0.018
+    },
+    {
+      "phase": "column check",
+      "measured": 31720546,
+      "crypto_ops": 27423375,
+      "accounted": 0.86,
+      "non_crypto": 4297171,
+      "share": 0.235
+    },
+    {
+      "phase": "encoding",
+      "measured": 4315966,
+      "crypto_ops": 4593361,
+      "accounted": 1.06,
+      "non_crypto": 0,
+      "share": 0.032
+    },
+    {
+      "phase": "reduction",
+      "measured": 766944,
+      "crypto_ops": 1319480,
+      "accounted": 1.72,
+      "non_crypto": 0,
+      "share": 0.006
+    },
+    {
+      "phase": "openings (pair)",
+      "measured": 61958420,
+      "crypto_ops": 15018347,
+      "accounted": 0.24,
+      "non_crypto": 46940073,
+      "share": 0.459
+    },
+    {
+      "phase": "closing",
+      "measured": 878316,
+      "crypto_ops": 495,
+      "accounted": 0.0,
+      "non_crypto": 877821,
+      "share": 0.007
+    }
+  ],
+  "summary_4096": {
+    "cryptography": 49443179,
+    "cryptography_share": 0.366,
+    "non_crypto": 86543527,
+    "non_crypto_share": 0.641
+  },
+  "summary_256": {
+    "cryptography": 43229517,
+    "cryptography_share": 0.459,
+    "non_crypto": 51707888,
+    "non_crypto_share": 0.549
+  },
+  "targets": [
+    {
+      "name": "opening machinery",
+      "instructions": 46940073,
+      "share_of_non_crypto": 0.54,
+      "grows_with_batch": true,
+      "proposal": null
+    },
+    {
+      "name": "deserialisation",
+      "instructions": 33911700,
+      "share_of_non_crypto": 0.39,
+      "grows_with_batch": true,
+      "proposal": "addressable proofs, ceiling ~17% of the guest"
+    }
+  ],
+  "constants": {
+    "deserialisation_instr_per_blob_byte": 10.13,
+    "input_floor_instr_per_byte": 3.24,
+    "addressable_ceiling_instr_4096": 23100000,
+    "config_construction_instr": 68000
+  },
+  "discarded": [
+    {
+      "what": "basefold-internal cuts",
+      "why": "bf_sumcheck lands 12.5 M below the reduction cut that must precede it - documented artifact signature"
+    },
+    {
+      "what": "tool's Merkle row (8071 paths x 9593)",
+      "why": "77.4 M exceeds the whole verify and double-counts permutations; the constant came from 136 sparse queries at depth 14"
+    }
+  ],
+  "notes": [
+    "the documented 3.4x paired-opening artifact did NOT reproduce: 31.5 M vs 30.5 M, ratio 0.97x",
+    "before_close sits 878 k below both_opens because they cut in different layers, not an ordering violation",
+    "the guest becomes LESS cryptographic as the batch grows (45.9% -> 36.6%) because the crypto-heavy column check is fixed while the machinery-heavy openings scale"
+  ],
+  "comparable_to": [
+    {
+      "run": "2026-09-13-recursion-quasar-cd-scaling",
+      "reason": "same box, commit, build and blobs; its totals are the denominators here"
+    }
+  ],
+  "not_comparable_to": [
+    {
+      "run": "2026-09-11 phase attribution",
+      "reason": "predates strategies C and D"
+    }
+  ]
+}

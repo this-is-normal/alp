@@ -179,6 +179,7 @@ impl Scenario {
             d: d(),
             base_b: base_b(),
             num_bits: N,
+            log_instances: 0,
         }
     }
 

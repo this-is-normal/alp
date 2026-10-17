@@ -1,17 +1,23 @@
 [workspace]
 resolver = "2"
 members = [
+    "flat-serde",
     "air",
     "baby-bear",
     "batch-stark",
     "blake3",
     "blake3-air",
     "bn254",
+    "brakedown",
+    "basefold",
     "challenger",
     "circle",
     "commit",
     "dft",
+    "ed25519",
     "ed25519-air",
+    "ed25519-fib-example",
+    "eddsa-example",
     "examples",
     "field",
     "field-testing",
@@ -29,17 +35,23 @@ members = [
     "monolith",
     "monolith-air",
     "monty-31",
+    "multi-fib-example",
     "multi-stark",
     "multilinear-util",
+    "pcs-profile",
     "poseidon1",
     "poseidon1-air",
     "poseidon2",
     "poseidon2-air",
+    "qa-code",
+    "quasar",
     "rescue",
     "security",
     "sha256",
+    "stark-stats",
     "sumcheck",
     "symmetric",
+    "trivial-mpcs",
     "uni-stark",
     "util",
     "whir",
@@ -106,11 +118,16 @@ p3-baby-bear = { path = "baby-bear", version = "0.6.0" }
 p3-blake3 = { path = "blake3", version = "0.6.0" }
 p3-blake3-air = { path = "blake3-air", version = "0.6.0" }
 p3-bn254 = { path = "bn254", version = "0.6.0" }
+p3-brakedown = { path = "brakedown", version = "0.6.0" }
+p3-basefold = { path = "basefold", version = "0.6.0" }
 p3-challenger = { path = "challenger", version = "0.6.0" }
 p3-circle = { path = "circle", version = "0.6.0" }
 p3-commit = { path = "commit", version = "0.6.0" }
 p3-dft = { path = "dft", version = "0.6.0" }
+p3-ed25519 = { path = "ed25519", version = "0.6.0" }
+p3-ed25519-air = { path = "ed25519-air", version = "0.6.0" }
 p3-examples = { path = "examples", version = "0.3.0" }
+p3-flat-serde = { path = "flat-serde", version = "0.6.0" }
 p3-field = { path = "field", version = "0.6.0" }
 p3-field-testing = { path = "field-testing", version = "0.6.0" }
 p3-fri = { path = "fri", version = "0.6.0" }
@@ -127,16 +144,21 @@ p3-mersenne-31 = { path = "mersenne-31", version = "0.6.0" }
 p3-monolith = { path = "monolith", version = "0.6.0" }
 p3-monolith-air = { path = "monolith-air", version = "0.6.0" }
 p3-monty-31 = { path = "monty-31", version = "0.6.0" }
+p3-multi-stark = { path = "multi-stark", version = "0.6.0" }
 p3-multilinear-util = { path = "multilinear-util", version = "0.6.0" }
 p3-poseidon1 = { path = "poseidon1", version = "0.6.0" }
 p3-poseidon1-air = { path = "poseidon1-air", version = "0.6.0" }
 p3-poseidon2 = { path = "poseidon2", version = "0.6.0" }
 p3-poseidon2-air = { path = "poseidon2-air", version = "0.6.0" }
+p3-qa-code = { path = "qa-code", version = "0.6.0" }
+p3-quasar = { path = "quasar", version = "0.6.0" }
 p3-rescue = { path = "rescue", version = "0.6.0" }
 p3-security = { path = "security", version = "0.6.0" }
 p3-sha256 = { path = "sha256", version = "0.6.0" }
+p3-stark-stats = { path = "stark-stats", version = "0.6.0" }
 p3-sumcheck = { path = "sumcheck", version = "0.6.0" }
 p3-symmetric = { path = "symmetric", version = "0.6.0" }
+p3-trivial-mpcs = { path = "trivial-mpcs", version = "0.6.0" }
 p3-uni-stark = { path = "uni-stark", version = "0.6.0" }
 p3-util = { path = "util", version = "0.6.0" }
 p3-whir = { path = "whir", version = "0.6.0" }

@@ -24,6 +24,10 @@ spin.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
+[features]
+# Instrumentation only: count pruned-batch verifications (see `pruned_counter`).
+count-ops = []
+
 [dev-dependencies]
 p3-baby-bear = { path = "../baby-bear" }
 p3-blake3 = { path = "../blake3" }

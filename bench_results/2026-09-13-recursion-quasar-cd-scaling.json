@@ -1,0 +1,165 @@
+{
+  "date": "2026-09-13",
+  "layer": "recursion",
+  "target": "Quasar guest, strategy C+D, scaling to 4096 signatures",
+  "headline": "8.3 ms/signature at 4096; +10.4 M instructions per doubling (logarithmic), prove app 24.7->34.0 s across 32x",
+  "host": "vultr4",
+  "commit": "70cb077d",
+  "branch": "quazar2",
+  "dirty": "true",
+  "hardware": {
+    "cpu": "AMD EPYC 7B12",
+    "cpu_quota_cores": 30.72,
+    "gpu": "RTX 5090 32 GB",
+    "load_average_during_run": 1.47
+  },
+  "toolchain": {
+    "rustc": "1.98.1",
+    "cargo_openvm": "v2.0.2 (59a69b8) [cuda]"
+  },
+  "parameters": {
+    "num_bits": 253,
+    "bf_inv_rate": 4,
+    "pow_bits": 16,
+    "max_log_cols": 16,
+    "segment_max_memory_gib": 26,
+    "vmexe_bytes": 50115207,
+    "features_guest": "hint-inverses",
+    "features_host": "quasar,bb-hash,parallel,record-queries"
+  },
+  "measured": true,
+  "repeats_per_point": 3,
+  "rows": [
+    {
+      "signatures": 128,
+      "instructions": 83703303,
+      "segments": 9,
+      "cells": 3309227735,
+      "prove_app_reps_s": [
+        25,
+        24,
+        25
+      ],
+      "prove_app_mean_s": 24.7,
+      "spread_s": 1,
+      "app_proof_bytes": 6878914,
+      "blob_bytes": 1982999,
+      "ms_per_sig": 192.7
+    },
+    {
+      "signatures": 256,
+      "instructions": 94239522,
+      "segments": 10,
+      "cells": 3717296426,
+      "prove_app_reps_s": [
+        30,
+        28,
+        29
+      ],
+      "prove_app_mean_s": 29.0,
+      "spread_s": 2,
+      "app_proof_bytes": 7860935,
+      "blob_bytes": 2391203,
+      "ms_per_sig": 113.3
+    },
+    {
+      "signatures": 512,
+      "instructions": 103852440,
+      "segments": 10,
+      "cells": 4098745912,
+      "prove_app_reps_s": [
+        27,
+        27,
+        28
+      ],
+      "prove_app_mean_s": 27.3,
+      "spread_s": 1,
+      "app_proof_bytes": 8359249,
+      "blob_bytes": 2601419,
+      "ms_per_sig": 53.4
+    },
+    {
+      "signatures": 1024,
+      "instructions": 114197592,
+      "segments": 12,
+      "cells": 4509244189,
+      "prove_app_reps_s": [
+        28,
+        28,
+        27
+      ],
+      "prove_app_mean_s": 27.7,
+      "spread_s": 1,
+      "app_proof_bytes": 9391572,
+      "blob_bytes": 2846299,
+      "ms_per_sig": 27.0
+    },
+    {
+      "signatures": 2048,
+      "instructions": 124555808,
+      "segments": 13,
+      "cells": 4919842858,
+      "prove_app_reps_s": [
+        32,
+        32,
+        32
+      ],
+      "prove_app_mean_s": 32.0,
+      "spread_s": 0,
+      "app_proof_bytes": 10298456,
+      "blob_bytes": 3088755,
+      "ms_per_sig": 15.6
+    },
+    {
+      "signatures": 4096,
+      "instructions": 135042075,
+      "segments": 14,
+      "cells": 5336055212,
+      "prove_app_reps_s": [
+        34,
+        33,
+        35
+      ],
+      "prove_app_mean_s": 34.0,
+      "spread_s": 2,
+      "app_proof_bytes": 11347093,
+      "blob_bytes": 3344515,
+      "ms_per_sig": 8.3
+    }
+  ],
+  "scaling": {
+    "instructions_per_doubling": [
+      10536219,
+      9612918,
+      10345152,
+      10358216,
+      10486267
+    ],
+    "note": "+10.4 M per doubling on an ~84 M base: dead linear in log(S). 32x the signatures for 1.61x the work."
+  },
+  "why_flat": [
+    "guest verifies ONE proof; its work is logarithmic in batch size",
+    "segments grow 9->14 across 32x, tracking cells",
+    "prove app steps with segment count: 9->~25 s, 10-12->~28 s, 13->32 s, 14->34 s"
+  ],
+  "noise": {
+    "earlier": "segment-inverted ordering, >=3 s, box load average ~22",
+    "this_run": "spreads 0-2 s, box load average 1.47",
+    "conclusion": "earlier wall-clock was contaminated by co-tenants on a shared vast.ai container"
+  },
+  "unexplained": [
+    "256 mean 29.0 s is slower than 512 mean 27.3 s despite the same segment count and fewer instructions; ranges barely separate"
+  ],
+  "comparable_to": [
+    {
+      "run": "2026-09-13-recursion-strategy-comparison",
+      "reason": "same box, commit, build; small deltas are the blob's extra trailing Option element"
+    }
+  ],
+  "not_comparable_to": [
+    {
+      "run": "wall-clock from the earlier loaded-box sweeps",
+      "reason": "co-tenant contamination"
+    }
+  ]
+}

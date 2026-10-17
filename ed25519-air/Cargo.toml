@@ -13,6 +13,7 @@ categories.workspace = true
 p3-air.workspace = true
 p3-field.workspace = true
 p3-matrix.workspace = true
+p3-util.workspace = true
 p3-uni-stark = { path = "../uni-stark" }
 
 num-bigint.workspace = true
@@ -24,6 +25,8 @@ p3-challenger = { path = "../challenger" }
 p3-commit = { path = "../commit", features = ["test-utils"] }
 p3-dft = { path = "../dft" }
 p3-field-testing = { path = "../field-testing" }
+p3-ed25519 = { path = "../ed25519" }
+rand_chacha = { version = "0.10", default-features = false }
 
 rand.workspace = true
 

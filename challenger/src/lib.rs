@@ -4,19 +4,23 @@
 extern crate alloc;
 
 mod duplex_challenger;
+mod cross_field_challenger;
 mod grinding_challenger;
 mod hash_challenger;
 mod multi_field_challenger;
+pub mod prime_field_challenger;
 mod serializing_challenger;
 
 use alloc::vec::Vec;
 use core::array;
 
 pub use duplex_challenger::*;
+pub use cross_field_challenger::*;
 pub use grinding_challenger::*;
 pub use hash_challenger::*;
 pub use multi_field_challenger::*;
 pub use p3_field::UniformSamplingField;
+pub use prime_field_challenger::DuplexChallengerPF;
 use p3_field::{Algebra, BasedVectorSpace, Field, PrimeField64};
 pub use serializing_challenger::*;
 

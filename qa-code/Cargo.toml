@@ -1,0 +1,43 @@
+[package]
+name = "p3-qa-code"
+description = "Quasi-abelian (QA) codes: a rate-1/c linear code whose encoder is two Walsh–Hadamard transforms and a pointwise product — field-agnostic, FFT-free, and the front end of the Quasar PCS."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# For the `LinearCode` / `LinearCodeExt` traits and, transitively, the tensor PCS
+# a QA code drops into (`TensorPcs`, `BrakedownMlPcs`) — which is exactly QAPCS.
+p3-brakedown.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-util.workspace = true
+
+rand.workspace = true
+serde = { workspace = true, features = ["derive", "alloc"] }
+# The rayon/serial shim: serial by default, rayon under `parallel`.
+p3-maybe-rayon.workspace = true
+
+[features]
+parallel = ["p3-maybe-rayon/parallel", "p3-brakedown/parallel"]
+
+[dev-dependencies]
+p3-baby-bear = { path = "../baby-bear" }
+p3-challenger = { path = "../challenger" }
+p3-ed25519 = { path = "../ed25519" }
+p3-goldilocks = { path = "../goldilocks" }
+p3-merkle-tree = { path = "../merkle-tree" }
+p3-multilinear-util = { path = "../multilinear-util" }
+p3-security = { path = "../security" }
+p3-symmetric = { path = "../symmetric" }
+
+criterion.workspace = true
+rand_chacha = { version = "0.10", default-features = false }
+
+[[bench]]
+name = "qa_encode"
+harness = false
+
+[lints]
+workspace = true

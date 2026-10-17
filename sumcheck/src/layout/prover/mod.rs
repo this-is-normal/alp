@@ -15,7 +15,7 @@ pub use claims::StackedClaims;
 use p3_challenger::{CanObserve, FieldChallenger, GrindingChallenger};
 use p3_commit::Mmcs;
 use p3_dft::TwoAdicSubgroupDft;
-use p3_field::{ExtensionField, TwoAdicField};
+use p3_field::{ExtensionField, Field, TwoAdicField};
 use p3_matrix::dense::DenseMatrix;
 use p3_multilinear_util::point::Point;
 pub use prefix::PrefixProver;
@@ -28,7 +28,13 @@ use crate::strategy::{SumcheckProver, VariableOrder};
 use crate::table::{OpeningEvals, OpeningRequest};
 
 /// Stacked-sumcheck prover layout
-pub trait Layout<F: TwoAdicField, EF: ExtensionField<F>>: Sized {
+///
+/// The trait is `Field`-generic: only [`commit`](Layout::commit) needs
+/// two-adicity (it RS-encodes the stacked polynomial via a DFT), so that bound
+/// lives on the method, not the trait. This lets field-agnostic backends (e.g.
+/// a Brakedown tensor commitment) use the layout's stacking / claim machinery
+/// over a non-two-adic field while WHIR still uses `commit`.
+pub trait Layout<F: Field, EF: ExtensionField<F>>: Sized {
     /// Builds this layout from a committed witness.
     fn from_witness(witness: Witness<F>) -> Self;
 
@@ -57,6 +63,8 @@ pub trait Layout<F: TwoAdicField, EF: ExtensionField<F>>: Sized {
         starting_log_inv_rate: usize,
     ) -> (Self, MT::Commitment, MT::ProverData<DenseMatrix<F>>)
     where
+        // Two-adicity is required only here: `commit_base` RS-encodes via a DFT.
+        F: TwoAdicField,
         Dft: TwoAdicSubgroupDft<F>,
         MT: Mmcs<F>,
         Challenger: CanObserve<MT::Commitment>,

@@ -9,7 +9,7 @@ use crate::eddsa::columns::{
     EdDsaPreprocessedCols, NUM_EDDSA_COLS, NUM_EDDSA_PREPROCESSED_COLS, NUM_EDDSA_PUBLIC_VALUES,
     add_cols, ladder_cols, sgc_cols, shared_cols,
 };
-use crate::eddsa::generation::generate_preprocessed_trace;
+use crate::eddsa::generation::generate_preprocessed_trace_batch;
 
 /// Monolithic AIR for non-cofactored RFC 8032 verification of `(R, s)` under public key `A` with
 /// challenge scalar `k`, over public values `[a_x, a_y, r_x, r_y, s, k]`.
@@ -45,6 +45,11 @@ pub struct EdDsaAir<F> {
     pub base_b: Point<F>,
     /// Scalar bit length `N`; the trace is `next_power_of_two(N + 3)` rows tall.
     pub num_bits: usize,
+    /// log2 of the number of signatures stacked vertically into ONE table. `0` = a single
+    /// signature (the original behavior); `k` = `2^k` signatures sharing the table, so the trace
+    /// is `2^k * next_power_of_two(N + 3)` rows tall. The verifier work is the same as one
+    /// signature plus `k` extra sumcheck rounds, i.e. logarithmic in the signature count.
+    pub log_instances: usize,
 }
 
 impl<F: Field + Sync> BaseAir<F> for EdDsaAir<F> {
@@ -53,10 +58,11 @@ impl<F: Field + Sync> BaseAir<F> for EdDsaAir<F> {
     }
 
     fn preprocessed_trace(&self) -> Option<RowMajorMatrix<F>> {
-        Some(generate_preprocessed_trace(
+        Some(generate_preprocessed_trace_batch(
             self.d,
             self.base_b,
             self.num_bits,
+            1 << self.log_instances,
         ))
     }
 
@@ -116,6 +122,8 @@ where
             is_sgc_a,
             is_sgc_r,
             is_add,
+            is_instance_first,
+            is_instance_last,
         } = builder.preprocessed().current_slice().borrow();
 
         // Every row carries all four views of the same 45 columns; which one is meaningful is
@@ -136,6 +144,9 @@ where
         // on every row in between. Degree 1 each (degree 2 with the transition factor).
         {
             let mut transition = builder.when_transition();
+            // Propagate the shared columns within an instance, but NOT across a seam into the next
+            // stacked instance (its shared columns are pinned by its own witness, not this one).
+            let mut transition = transition.when(AB::Expr::ONE - is_instance_last);
             for (local_v, next_v) in [
                 (shared.a_x, next_shared.a_x),
                 (shared.a_y, next_shared.a_y),
@@ -231,11 +242,13 @@ where
             );
         }
 
-        // -- ladder row 0: boundary values for both ladders --------------------------------------
+        // -- ladder row 0 of EACH instance: boundary values for both ladders ---------------------
         //
-        // Row 0 is always a ladder row (`num_bits > 0`), so `is_first_row` alone is the right gate.
+        // The first row of every stacked instance is a ladder row (`num_bits > 0`), so the
+        // preprocessed `is_instance_first` selector is the right gate. For a single instance it is
+        // 1 only on row 0, reproducing the original `when_first_row` gate exactly.
         {
-            let mut first_row = builder.when_first_row();
+            let mut first_row = builder.when(is_instance_first);
 
             first_row.assert_zero(var.x_acc);
             first_row.assert_one(var.y_acc);

@@ -1,0 +1,46 @@
+[package]
+name = "ed25519-fib-example"
+description = "End-to-end multilinear (multi-stark) Fibonacci proof over the ed25519 base field, committed with the field-agnostic Brakedown tensor PCS. Native STARK over a non-two-adic, non-PrimeField64 field."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+p3-air.workspace = true
+p3-basefold.workspace = true
+p3-brakedown.workspace = true
+p3-qa-code.workspace = true
+p3-quasar.workspace = true
+p3-challenger.workspace = true
+p3-ed25519.workspace = true
+p3-field.workspace = true
+p3-matrix.workspace = true
+p3-merkle-tree.workspace = true
+p3-multi-stark.workspace = true
+p3-stark-stats.workspace = true
+p3-sumcheck.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+
+rand.workspace = true
+tracing.workspace = true
+rand_chacha = { version = "0.10", default-features = false }
+
+[features]
+# Rayon parallelism through multi-stark and every commitment backend.
+parallel = [
+    "p3-multi-stark/parallel",
+    "p3-basefold/parallel",
+    "p3-brakedown/parallel",
+    "p3-qa-code/parallel",
+    "p3-quasar/parallel",
+]
+
+[dev-dependencies]
+p3-stark-stats = { path = "../stark-stats" }
+serde = { workspace = true }
+p3-multi-stark.workspace = true
+
+[lints]
+workspace = true

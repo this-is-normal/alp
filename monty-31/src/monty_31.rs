@@ -68,6 +68,31 @@ impl<MP: MontyParameters> MontyField31<MP> {
     /// This is `pub(crate)` for tests and delayed reduction strategies. If you're using it outside of those, you're
     /// likely doing something fishy.
     #[inline(always)]
+    /// The raw Montgomery word, `value·R mod P`.
+    ///
+    /// Representation-level access, for code that must hand the field element
+    /// to something with its own convention and convert back — an OpenVM
+    /// Poseidon2 precompile taking canonical `u32`s, say. Since `R < P`, the
+    /// word is itself a valid canonical value, so `from_monty_raw` and
+    /// `to_monty_raw` compose into the field bijection `x -> x·R`.
+    ///
+    /// Prefer [`PrimeField32::as_canonical_u32`] unless you specifically need
+    /// the representation.
+    #[inline]
+    pub const fn to_monty_raw(&self) -> u32 {
+        self.value
+    }
+
+    /// Inverse of [`Self::to_monty_raw`]: wrap a raw Montgomery word.
+    ///
+    /// # Safety-adjacent
+    ///
+    /// `value` must be `< P`; anything else denormalises the element.
+    #[inline]
+    pub const fn from_monty_raw(value: u32) -> Self {
+        Self::new_monty(value)
+    }
+
     pub(crate) const fn new_monty(value: u32) -> Self {
         Self {
             value,

@@ -1,0 +1,45 @@
+[package]
+name = "p3-ed25519"
+description = "The ed25519 base field F_p where p = 2^255 - 19, implemented as a Plonky3 field"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+p3-field.workspace = true
+p3-poseidon2.workspace = true
+p3-symmetric.workspace = true
+p3-util.workspace = true
+
+num-bigint.workspace = true
+paste.workspace = true
+rand.workspace = true
+serde = { workspace = true, features = ["derive", "alloc"] }
+
+# Guest-only: ed25519 field mul routes through OpenVM's modular-arithmetic precompile
+# (moduli_declare!). Not pulled on host (target-gated), so host builds are unaffected.
+[target.'cfg(target_os = "zkvm")'.dependencies]
+openvm = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1" }
+openvm-algebra-guest = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1" }
+openvm-algebra-moduli-macros = { git = "https://github.com/openvm-org/openvm.git", tag = "v2.0.1", default-features = false }
+
+[dev-dependencies]
+p3-field-testing = { path = "../field-testing" }
+
+criterion.workspace = true
+proptest.workspace = true
+serde_json.workspace = true
+
+[[bench]]
+name = "bench_field"
+harness = false
+
+[lints]
+workspace = true
+
+[features]
+count-ops = []

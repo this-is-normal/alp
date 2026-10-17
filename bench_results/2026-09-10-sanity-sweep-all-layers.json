@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-10",
+  "layer": "pcs+prover+recursion",
+  "target": "Brakedown vs BaseFold vs Quasar, all layers",
+  "headline": "Quasar fastest prover (14.1 s @ S=1024) and ~1.9x cheapest in-circuit",
+  "host": "vultr4",
+  "commit": "70cb077d", "branch": "quazar2", "dirty": "true (working tree)",
+  "hardware": { "cpu": "AMD EPYC 7B12", "cpu_quota_cores": 30.72, "memory_gb": 503,
+                "gpu": "RTX 5090 32 GB", "cuda": "13.1" },
+  "toolchain": { "rustc": "1.98.1", "cargo_openvm": "v2.0.2 (59a69b8) [cuda]" },
+  "measured": true,
+  "pcs_nv20": [
+    { "pcs": "basefold",  "q": 288,  "proof_bytes": 1284647, "commit_us": 16117464, "open_us": 14501091, "verify_us": 62568,  "hashes": 38964,  "mul": 25560,  "sq": 5040,  "inv": 20,  "add": 23996 },
+    { "pcs": "quasar",    "q": 421,  "proof_bytes": 2097529, "commit_us": 4047609,  "open_us": 1311931,  "verify_us": 109436, "hashes": 66345,  "mul": 84305,  "sq": 36792, "inv": 146, "add": 68572 },
+    { "pcs": "brakedown", "q": 2936, "proof_bytes": 4224906, "commit_us": 3873669,  "open_us": 182642,   "verify_us": 268855, "hashes": 142220, "mul": 748845, "sq": 0,     "inv": 0,   "add": 680106 }
+  ],
+  "prover": [
+    { "S": 1,    "brakedown_ms": 96,    "basefold_ms": 380,    "quasar_ms": 275 },
+    { "S": 4,    "brakedown_ms": 238,   "basefold_ms": 965,    "quasar_ms": 374 },
+    { "S": 16,   "brakedown_ms": 571,   "basefold_ms": 2405,   "quasar_ms": 654 },
+    { "S": 32,   "brakedown_ms": 772,   "basefold_ms": 4990,   "quasar_ms": 887 },
+    { "S": 64,   "brakedown_ms": 1538,  "basefold_ms": 9672,   "quasar_ms": 1462 },
+    { "S": 128,  "brakedown_ms": 2516,  "basefold_ms": 19309,  "quasar_ms": 2686 },
+    { "S": 256,  "brakedown_ms": 4806,  "basefold_ms": 38474,  "quasar_ms": 4474 },
+    { "S": 1024, "brakedown_ms": 19845, "basefold_ms": 152874, "quasar_ms": 14070 }
+  ],
+  "recursion": [
+    { "S": 32,  "quasar_instr": 96352089,  "quasar_seg": 10, "quasar_prove_app_s": 42, "basefold_instr": 191915964, "basefold_seg": 17, "basefold_prove_app_s": 51 },
+    { "S": 64,  "quasar_instr": 106067766, "quasar_seg": 11, "quasar_prove_app_s": 44, "basefold_instr": 204294415, "basefold_seg": 19, "basefold_prove_app_s": 51 },
+    { "S": 128, "quasar_instr": 116577012, "quasar_seg": 13, "quasar_prove_app_s": 46, "basefold_instr": 216839286, "basefold_seg": 20, "basefold_prove_app_s": 55 }
+  ],
+  "supersedes": ["2026-09-09-recursion-basefold", "2026-09-10-recursion-quasar-flat (in-circuit comparison only)"],
+  "not_comparable_to": [{ "run": "2026-09-07-pcs-native-comparison", "reason": "different box (vultr3)" }]
+}

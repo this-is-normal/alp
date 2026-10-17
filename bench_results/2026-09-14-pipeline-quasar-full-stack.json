@@ -1,0 +1,261 @@
+{
+  "date": "2026-09-14",
+  "layer": "pipeline",
+  "target": "Quasar strategy C+D: native prover + prove app + prove stark, S=32..4096",
+  "headline": "4096 sigs -> 534,636 B at 8.6 ms/sig; native prover overtakes recursion as the bottleneck above ~2,700 sigs",
+  "host": "vultr4",
+  "commit": "70cb077d",
+  "branch": "quazar2",
+  "dirty": "true",
+  "box_load_average_at_start": 3.07,
+  "hardware": {
+    "cpu": "AMD EPYC 7B12",
+    "cpu_quota_cores": 30.72,
+    "gpu": "RTX 5090 32 GB",
+    "cuda": "13.1"
+  },
+  "toolchain": {
+    "rustc": "1.98.1",
+    "cargo_openvm": "v2.0.2 (59a69b8) [cuda], patched for per-AIR cost"
+  },
+  "parameters": {
+    "num_bits": 253,
+    "strategy": "C+D",
+    "bf_inv_rate": 4,
+    "pow_bits": 16,
+    "max_log_cols": 16,
+    "segment_max_memory_gib": 26,
+    "vmexe_bytes": 50115207
+  },
+  "measured": true,
+  "repeats": {
+    "prove_app": 3,
+    "prove_stark": 2
+  },
+  "native": [
+    {
+      "signatures": 32,
+      "trace": "8192x45",
+      "proof_bytes": 1428701,
+      "bytes_per_sig": 44646.9,
+      "setup_ms": 81.0,
+      "prove_ms": 954.5,
+      "ms_per_sig": 29.83,
+      "verify_ms": 110.9
+    },
+    {
+      "signatures": 64,
+      "trace": "16384x45",
+      "proof_bytes": 1610534,
+      "bytes_per_sig": 25164.6,
+      "setup_ms": 157.0,
+      "prove_ms": 1543.0,
+      "ms_per_sig": 24.11,
+      "verify_ms": 107.1
+    },
+    {
+      "signatures": 128,
+      "trace": "32768x45",
+      "proof_bytes": 1822813,
+      "bytes_per_sig": 14240.7,
+      "setup_ms": 236.6,
+      "prove_ms": 2528.9,
+      "ms_per_sig": 19.76,
+      "verify_ms": 106.3
+    },
+    {
+      "signatures": 256,
+      "trace": "65536x45",
+      "proof_bytes": 2196130,
+      "bytes_per_sig": 8578.6,
+      "setup_ms": 255.9,
+      "prove_ms": 3792.3,
+      "ms_per_sig": 14.81,
+      "verify_ms": 124.2
+    },
+    {
+      "signatures": 512,
+      "trace": "131072x45",
+      "proof_bytes": 2411232,
+      "bytes_per_sig": 4709.4,
+      "setup_ms": 397.4,
+      "prove_ms": 6848.6,
+      "ms_per_sig": 13.38,
+      "verify_ms": 133.6
+    },
+    {
+      "signatures": 1024,
+      "trace": "262144x45",
+      "proof_bytes": 2670273,
+      "bytes_per_sig": 2607.7,
+      "setup_ms": 679.1,
+      "prove_ms": 12963.3,
+      "ms_per_sig": 12.66,
+      "verify_ms": 147.6
+    },
+    {
+      "signatures": 2048,
+      "trace": "524288x45",
+      "proof_bytes": 2925839,
+      "bytes_per_sig": 1428.6,
+      "setup_ms": 1160.9,
+      "prove_ms": 24794.2,
+      "ms_per_sig": 12.11,
+      "verify_ms": 160.1
+    },
+    {
+      "signatures": 4096,
+      "trace": "1048576x45",
+      "proof_bytes": 3202008,
+      "bytes_per_sig": 781.7,
+      "setup_ms": 1927.1,
+      "prove_ms": 52977.0,
+      "ms_per_sig": 12.93,
+      "verify_ms": 172.2
+    }
+  ],
+  "openvm": [
+    {
+      "signatures": 32,
+      "instructions": 71751216,
+      "segments": 7,
+      "cells": 2842545528,
+      "app_s": 22.8,
+      "app_spread_s": 0.6,
+      "app_proof_bytes": 5600566,
+      "stark_s": 23.6,
+      "stark_spread_s": 0.2,
+      "agg_s": 0.79,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 64,
+      "instructions": 77202200,
+      "segments": 8,
+      "cells": 3055564714,
+      "app_s": 26.0,
+      "app_spread_s": 0.9,
+      "app_proof_bytes": 6368538,
+      "stark_s": 26.8,
+      "stark_spread_s": 0.8,
+      "agg_s": 0.78,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 128,
+      "instructions": 83703303,
+      "segments": 9,
+      "cells": 3309227735,
+      "app_s": 24.4,
+      "app_spread_s": 0.6,
+      "app_proof_bytes": 6878914,
+      "stark_s": 24.4,
+      "stark_spread_s": 2.0,
+      "agg_s": -0.01,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 256,
+      "instructions": 94239522,
+      "segments": 10,
+      "cells": 3717296426,
+      "app_s": 28.1,
+      "app_spread_s": 0.6,
+      "app_proof_bytes": 7860935,
+      "stark_s": 29.6,
+      "stark_spread_s": 0.4,
+      "agg_s": 1.5,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 512,
+      "instructions": 103852440,
+      "segments": 10,
+      "cells": 4098745912,
+      "app_s": 27.7,
+      "app_spread_s": 1.1,
+      "app_proof_bytes": 8359249,
+      "stark_s": 29.3,
+      "stark_spread_s": 0.2,
+      "agg_s": 1.58,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 1024,
+      "instructions": 114197592,
+      "segments": 12,
+      "cells": 4509244189,
+      "app_s": 27.4,
+      "app_spread_s": 0.2,
+      "app_proof_bytes": 9391572,
+      "stark_s": 29.3,
+      "stark_spread_s": 0.7,
+      "agg_s": 1.93,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 2048,
+      "instructions": 124555808,
+      "segments": 13,
+      "cells": 4919842858,
+      "app_s": 31.7,
+      "app_spread_s": 1.4,
+      "app_proof_bytes": 10298456,
+      "stark_s": 33.7,
+      "stark_spread_s": 0.1,
+      "agg_s": 1.99,
+      "root_proof_bytes": 534636
+    },
+    {
+      "signatures": 4096,
+      "instructions": 135042075,
+      "segments": 14,
+      "cells": 5336055212,
+      "app_s": 33.6,
+      "app_spread_s": 1.2,
+      "app_proof_bytes": 11347093,
+      "stark_s": 35.4,
+      "stark_spread_s": 0.2,
+      "agg_s": 1.82,
+      "root_proof_bytes": 534636
+    }
+  ],
+  "findings": [
+    "root proof is exactly 534,636 B at all eight sizes",
+    "aggregation is ~1.5 s FLAT, not proportional to segments (7->14 segments moved it 0.79->1.82 s; one point measured -0.01 s, inside noise)",
+    "native prover is linear in S (~12.5 ms/sig); recursion is logarithmic (+1.7 s per doubling)",
+    "crossover at ~2,700 signatures: below it recursion dominates, above it the native prover does",
+    "at 4096 the native prover is 60% of the chain and rising",
+    "app proving is nearly flat: 22.8 s at S=32 vs 33.6 s at S=4096 - a 128x batch for 1.5x the time"
+  ],
+  "bottleneck": {
+    "crossover_signatures": 2700,
+    "native_share": {
+      "32": 0.04,
+      "256": 0.11,
+      "1024": 0.31,
+      "2048": 0.42,
+      "4096": 0.6
+    },
+    "mitigations": [
+      "native is CPU (rayon, 30.72-core quota), prove app is GPU - a pipeline overlaps them, giving throughput max(native, recursion) ~53 s rather than the 88 s sum",
+      "native has headroom: 30-core quota of 256 visible vCPUs, rayon measured 8.1x on ~23 cores; the GPU path already saturates one 5090"
+    ]
+  },
+  "comparable_to": [
+    {
+      "run": "2026-09-13-recursion-quasar-cd-scaling",
+      "reason": "same box, commit, guest and blobs; app figures agree within the repeat spread"
+    }
+  ],
+  "not_comparable_to": [
+    {
+      "run": "any wall-clock before 2026-09-11",
+      "reason": "build path included, ~18 s"
+    },
+    {
+      "run": "sweeps taken at load average ~22",
+      "reason": "noise exceeded signal"
+    }
+  ]
+}
